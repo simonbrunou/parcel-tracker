@@ -16,7 +16,7 @@ COPY --from=frontend /app/web/dist/ ./web/dist/
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /parcel-tracker ./cmd/parcel-tracker
 
 # Stage 3: Final minimal image
-FROM alpine:3.21
+FROM alpine:latest
 RUN apk add --no-cache ca-certificates tzdata
 COPY --from=backend /parcel-tracker /usr/local/bin/parcel-tracker
 VOLUME /data
