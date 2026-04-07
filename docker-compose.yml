@@ -1,0 +1,13 @@
+services:
+  parcel-tracker:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - parcel-data:/data
+    environment:
+      - PARCEL_TRACKER_PASSWORD=changeme
+    restart: unless-stopped
+
+volumes:
+  parcel-data:
