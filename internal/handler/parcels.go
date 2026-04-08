@@ -9,6 +9,7 @@ import (
 
 	"github.com/simonbrunou/parcel-tracker/internal/model"
 	"github.com/simonbrunou/parcel-tracker/internal/store"
+	"github.com/simonbrunou/parcel-tracker/internal/tracker"
 )
 
 type createParcelRequest struct {
@@ -88,6 +89,20 @@ func (h *Handler) CreateParcel(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create parcel")
 		return
+	}
+
+	// Auto-refresh: fetch initial tracking events for non-manual carriers.
+	if t, ok := h.Tracker.Get(created.Carrier); ok && created.Carrier != model.CarrierManual {
+		if events, err := t.Track(r.Context(), created.TrackingNumber); err == nil {
+			for _, e := range events {
+				e.ParcelID = created.ID
+				h.Store.CreateEvent(r.Context(), e)
+			}
+			now := time.Now().UTC()
+			created.LastCheck = &now
+			h.Store.UpdateParcel(r.Context(), created)
+			created, _ = h.Store.GetParcel(r.Context(), created.ID)
+		}
 	}
 
 	writeJSON(w, http.StatusCreated, created)
@@ -171,12 +186,11 @@ func (h *Handler) RefreshParcel(w http.ResponseWriter, r *http.Request) {
 	existing, _ := h.Store.ListEvents(r.Context(), parcel.ID)
 	seen := make(map[string]bool, len(existing))
 	for _, e := range existing {
-		seen[e.Timestamp.UTC().Format("2006-01-02T15:04:05")+"|"+string(e.Status)+"|"+e.Message] = true
+		seen[tracker.EventKey(e)] = true
 	}
 
 	for _, e := range events {
-		key := e.Timestamp.UTC().Format("2006-01-02T15:04:05") + "|" + string(e.Status) + "|" + e.Message
-		if seen[key] {
+		if seen[tracker.EventKey(e)] {
 			continue
 		}
 		e.ParcelID = parcel.ID
