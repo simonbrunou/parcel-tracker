@@ -1,3 +1,5 @@
+import { t, getLocaleCode } from "./i18n.svelte";
+
 export function formatRelativeTime(dateStr: string): string {
   const date = new Date(dateStr);
   const now = new Date();
@@ -7,12 +9,12 @@ export function formatRelativeTime(dateStr: string): string {
   const diffHour = Math.floor(diffMin / 60);
   const diffDay = Math.floor(diffHour / 24);
 
-  if (diffSec < 60) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  if (diffHour < 24) return `${diffHour}h ago`;
-  if (diffDay < 7) return `${diffDay}d ago`;
+  if (diffSec < 60) return t("time.justNow");
+  if (diffMin < 60) return t("time.minutesAgo", { n: diffMin });
+  if (diffHour < 24) return t("time.hoursAgo", { n: diffHour });
+  if (diffDay < 7) return t("time.daysAgo", { n: diffDay });
 
-  return date.toLocaleDateString(undefined, {
+  return date.toLocaleDateString(getLocaleCode(), {
     month: "short",
     day: "numeric",
     year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
@@ -20,7 +22,7 @@ export function formatRelativeTime(dateStr: string): string {
 }
 
 export function formatDateTime(dateStr: string): string {
-  return new Date(dateStr).toLocaleString(undefined, {
+  return new Date(dateStr).toLocaleString(getLocaleCode(), {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -28,16 +30,6 @@ export function formatDateTime(dateStr: string): string {
     minute: "2-digit",
   });
 }
-
-export const STATUS_LABELS: Record<string, string> = {
-  unknown: "Unknown",
-  info_received: "Info Received",
-  in_transit: "In Transit",
-  out_for_delivery: "Out for Delivery",
-  delivered: "Delivered",
-  failed: "Failed",
-  expired: "Expired",
-};
 
 export const STATUS_COLORS: Record<string, string> = {
   unknown: "bg-[var(--color-status-unknown)]",

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { push } from "svelte-spa-router";
   import { login, setup, checkAuth } from "../lib/api";
+  import { t } from "../lib/i18n.svelte";
 
   let password = $state("");
   let confirmPassword = $state("");
@@ -28,12 +29,12 @@
     try {
       if (!configured) {
         if (password !== confirmPassword) {
-          error = "Passwords do not match";
+          error = t("login.passwordsMismatch");
           loading = false;
           return;
         }
         if (password.length < 4) {
-          error = "Password must be at least 4 characters";
+          error = t("login.passwordTooShort");
           loading = false;
           return;
         }
@@ -43,7 +44,7 @@
       }
       push("/");
     } catch (err: any) {
-      error = err.message || "Login failed";
+      error = err.message || t("login.failed");
     } finally {
       loading = false;
     }
@@ -52,7 +53,7 @@
 
 <div class="min-h-screen flex items-center justify-center p-4">
   {#if checking}
-    <div class="animate-pulse text-[var(--color-text-muted)]">Loading...</div>
+    <div class="animate-pulse text-[var(--color-text-muted)]">{t("common.loading")}</div>
   {:else}
     <div class="w-full max-w-sm">
       <div class="text-center mb-8">
@@ -61,9 +62,9 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
           </svg>
         </div>
-        <h1 class="text-2xl font-bold text-[var(--color-text-primary)]">Parcel Tracker</h1>
+        <h1 class="text-2xl font-bold text-[var(--color-text-primary)]">{t("app.name")}</h1>
         <p class="text-[var(--color-text-secondary)] mt-1">
-          {configured ? "Sign in to continue" : "Create your password to get started"}
+          {configured ? t("login.signIn") : t("login.createPassword")}
         </p>
       </div>
 
@@ -76,7 +77,7 @@
 
         <div>
           <label for="password" class="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">
-            Password
+            {t("login.password")}
           </label>
           <input
             id="password"
@@ -84,14 +85,14 @@
             bind:value={password}
             required
             class="w-full px-3 py-2.5 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] focus:border-transparent transition-all"
-            placeholder="Enter your password"
+            placeholder={t("login.passwordPlaceholder")}
           />
         </div>
 
         {#if !configured}
           <div>
             <label for="confirm" class="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">
-              Confirm Password
+              {t("login.confirmPassword")}
             </label>
             <input
               id="confirm"
@@ -99,7 +100,7 @@
               bind:value={confirmPassword}
               required
               class="w-full px-3 py-2.5 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] focus:border-transparent transition-all"
-              placeholder="Confirm your password"
+              placeholder={t("login.confirmPasswordPlaceholder")}
             />
           </div>
         {/if}
@@ -109,7 +110,7 @@
           disabled={loading}
           class="w-full py-2.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white font-medium rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
         >
-          {loading ? "..." : configured ? "Sign In" : "Get Started"}
+          {loading ? "..." : configured ? t("login.signInButton") : t("login.getStarted")}
         </button>
       </form>
     </div>

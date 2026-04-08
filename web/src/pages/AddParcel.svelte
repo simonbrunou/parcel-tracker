@@ -2,6 +2,7 @@
   import { push } from "svelte-spa-router";
   import { createParcel, getHealth, type CarrierInfo } from "../lib/api";
   import Navbar from "../components/Navbar.svelte";
+  import { t } from "../lib/i18n.svelte";
 
   let trackingNumber = $state("");
   let carrier = $state("manual");
@@ -31,7 +32,7 @@
       });
       push(`/parcels/${parcel.id}`);
     } catch (err: any) {
-      error = err.message || "Failed to create parcel";
+      error = err.message || t("addParcel.failed");
     } finally {
       loading = false;
     }
@@ -49,9 +50,9 @@
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
       </svg>
-      Back
+      {t("common.back")}
     </button>
-    <h1 class="text-2xl font-bold text-[var(--color-text-primary)] mt-2">Add Parcel</h1>
+    <h1 class="text-2xl font-bold text-[var(--color-text-primary)] mt-2">{t("addParcel.title")}</h1>
   </div>
 
   <form onsubmit={handleSubmit} class="space-y-5">
@@ -63,7 +64,7 @@
 
     <div>
       <label for="tracking" class="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">
-        Tracking Number <span class="text-[var(--color-danger)]">*</span>
+        {t("addParcel.trackingNumber")} <span class="text-[var(--color-danger)]">*</span>
       </label>
       <input
         id="tracking"
@@ -71,13 +72,13 @@
         bind:value={trackingNumber}
         required
         class="w-full px-3 py-2.5 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] font-mono placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] transition-all"
-        placeholder="e.g. 1Z999AA10123456784"
+        placeholder={t("addParcel.trackingPlaceholder")}
       />
     </div>
 
     <div>
       <label for="carrier" class="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">
-        Carrier
+        {t("addParcel.carrier")}
       </label>
       <select
         id="carrier"
@@ -88,34 +89,34 @@
           <option value={c.code}>{c.name}</option>
         {/each}
         {#if carriers.length === 0}
-          <option value="manual">Manual</option>
+          <option value="manual">{t("common.manual")}</option>
         {/if}
       </select>
     </div>
 
     <div>
       <label for="name" class="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">
-        Custom Name
+        {t("addParcel.customName")}
       </label>
       <input
         id="name"
         type="text"
         bind:value={name}
         class="w-full px-3 py-2.5 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] transition-all"
-        placeholder="e.g. New Headphones"
+        placeholder={t("addParcel.namePlaceholder")}
       />
     </div>
 
     <div>
       <label for="notes" class="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">
-        Notes
+        {t("addParcel.notes")}
       </label>
       <textarea
         id="notes"
         bind:value={notes}
         rows="3"
         class="w-full px-3 py-2.5 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] transition-all resize-none"
-        placeholder="Optional notes..."
+        placeholder={t("addParcel.notesPlaceholder")}
       ></textarea>
     </div>
 
@@ -125,14 +126,14 @@
         onclick={() => push("/")}
         class="flex-1 py-2.5 bg-[var(--color-surface-alt)] border border-[var(--color-border)] text-[var(--color-text-primary)] font-medium rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer"
       >
-        Cancel
+        {t("common.cancel")}
       </button>
       <button
         type="submit"
         disabled={loading}
         class="flex-1 py-2.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white font-medium rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
       >
-        {loading ? "Adding..." : "Add Parcel"}
+        {loading ? t("addParcel.adding") : t("addParcel.submit")}
       </button>
     </div>
   </form>

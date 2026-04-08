@@ -2,6 +2,7 @@
   import { push } from "svelte-spa-router";
   import { logout } from "../lib/api";
   import { toggleTheme, isDarkTheme } from "../lib/utils";
+  import { t, getLocale, setLocale, supportedLocales } from "../lib/i18n.svelte";
 
   let dark = $state(isDarkTheme());
 
@@ -14,6 +15,12 @@
     await logout();
     push("/login");
   }
+
+  function cycleLocale() {
+    const codes = supportedLocales.map((l) => l.code);
+    const idx = codes.indexOf(getLocale());
+    setLocale(codes[(idx + 1) % codes.length]);
+  }
 </script>
 
 <header class="sticky top-0 z-50 bg-[var(--color-surface)]/80 backdrop-blur-lg border-b border-[var(--color-border)]">
@@ -22,14 +29,23 @@
       <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
       </svg>
-      Parcel Tracker
+      {t("app.name")}
     </a>
 
     <div class="flex items-center gap-1">
       <button
+        onclick={cycleLocale}
+        class="p-2 rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors text-[var(--color-text-secondary)] cursor-pointer text-xs font-semibold uppercase"
+        aria-label={t("nav.language")}
+        title={t("nav.language")}
+      >
+        {getLocale()}
+      </button>
+
+      <button
         onclick={handleToggleTheme}
         class="p-2 rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors text-[var(--color-text-secondary)] cursor-pointer"
-        aria-label="Toggle theme"
+        aria-label={t("nav.toggleTheme")}
       >
         {#if dark}
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -45,7 +61,7 @@
       <button
         onclick={handleLogout}
         class="p-2 rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors text-[var(--color-text-secondary)] cursor-pointer"
-        aria-label="Logout"
+        aria-label={t("nav.logout")}
       >
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
