@@ -5,12 +5,28 @@ A self-hosted parcel tracking application. Track all your packages in one place 
 ## Features
 
 - Track parcels from multiple carriers in a single dashboard
+- Automatic background tracking — refreshes at configurable intervals
 - Manual tracking events for any carrier
+- Parcel archiving and search/filter support
 - Clean, responsive UI with dark/light theme
 - Single-binary deployment — no external dependencies
 - SQLite database — zero configuration, easy backups
 - Docker support — deploy anywhere in seconds
 - Password-protected — simple single-user authentication
+
+## Supported Carriers
+
+| Carrier | API Key Required | Notes |
+|---|---|---|
+| La Poste | Yes (`LAPOSTE_API_KEY`) | French postal service |
+| Colissimo | Yes (`LAPOSTE_API_KEY`) | Uses La Poste API |
+| Chronopost | No | SOAP API |
+| Mondial Relay | No | Tracking format: `expeditionNumber-postalCode` |
+| GLS | No | Public REST API |
+| DPD | No | |
+| Colis Privé | No | |
+| Relais Colis | No | |
+| Manual | No | Add tracking events manually for any carrier |
 
 ## Quick Start
 
@@ -30,9 +46,17 @@ docker compose up -d
 docker run -d -p 8080:8080 -v parcel-data:/data -e PARCEL_TRACKER_PASSWORD=yourpassword parcel-tracker
 ```
 
+### Pre-built image
+
+A pre-built image is published to `ghcr.io/simonbrunou/parcel-tracker` on every push to main and on release tags.
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
 ### From source
 
-Requirements: Go 1.24+, Node.js 22+
+Requirements: Go 1.25+, Node.js 22+
 
 ```bash
 # Build everything
@@ -49,6 +73,8 @@ make build
 | `PORT` | `8080` | HTTP server port |
 | `DATABASE_PATH` | `data/parcel-tracker.db` | SQLite database file path |
 | `PARCEL_TRACKER_PASSWORD` | _(none)_ | Set initial password on first run |
+| `REFRESH_INTERVAL` | `30m` | Background tracking refresh interval (set to `0` to disable) |
+| `LAPOSTE_API_KEY` | _(none)_ | API key for La Poste/Colissimo tracking ([get one here](https://developer.laposte.fr)) |
 
 ## Development
 
@@ -58,6 +84,9 @@ cd web && npm install && cd ..
 
 # Run both frontend (Vite HMR) and backend concurrently
 make dev
+
+# Run tests
+make test
 ```
 
 - Frontend dev server: http://localhost:5173 (with HMR)
@@ -74,25 +103,26 @@ internal/
   model/                Data models
   server/               HTTP server + SPA handler
   store/                SQLite data layer
-  tracker/              Carrier tracking abstraction
+  tracker/              Carrier tracking implementations
 web/
   src/                  Svelte 5 frontend
   dist/                 Built frontend (embedded in Go binary)
 ```
 
-**Stack**: Go, Svelte 5, Tailwind CSS 4, SQLite
+**Stack**: Go 1.25, Svelte 5, Tailwind CSS 4, Vite 6, TypeScript, SQLite
 
 ## API
 
-All endpoints under `/api` require authentication (JWT cookie) except auth endpoints.
+All endpoints under `/api` require authentication (JWT cookie) except auth and health endpoints.
 
 | Method | Path | Description |
 |---|---|---|
+| GET | `/api/health` | Health check + available carriers |
 | POST | `/api/auth/setup` | Set initial password |
 | POST | `/api/auth/login` | Login |
 | POST | `/api/auth/logout` | Logout |
 | GET | `/api/auth/check` | Check auth status |
-| GET | `/api/parcels` | List parcels |
+| GET | `/api/parcels` | List parcels (supports `status`, `search`, `archived` query params) |
 | POST | `/api/parcels` | Create parcel |
 | GET | `/api/parcels/:id` | Get parcel |
 | PUT | `/api/parcels/:id` | Update parcel |
