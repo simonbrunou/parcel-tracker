@@ -51,11 +51,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Trigger Komodo redeploy
-        if: success()
-        run: |
-          curl -fsSL -X POST \
-            "${{ secrets.KOMODO_WEBHOOK_URL }}" \
-            -H "Content-Type: application/json" \
-            -d '{"image_tag": "${{ steps.meta.outputs.version }}"}'
