@@ -90,6 +90,20 @@ func (h *Handler) CreateParcel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Auto-refresh: fetch initial tracking events for non-manual carriers.
+	if t, ok := h.Tracker.Get(created.Carrier); ok && created.Carrier != model.CarrierManual {
+		if events, err := t.Track(r.Context(), created.TrackingNumber); err == nil {
+			for _, e := range events {
+				e.ParcelID = created.ID
+				h.Store.CreateEvent(r.Context(), e)
+			}
+			now := time.Now().UTC()
+			created.LastCheck = &now
+			h.Store.UpdateParcel(r.Context(), created)
+			created, _ = h.Store.GetParcel(r.Context(), created.ID)
+		}
+	}
+
 	writeJSON(w, http.StatusCreated, created)
 }
 

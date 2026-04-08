@@ -100,21 +100,22 @@ type chronopostTrackResponse struct {
 }
 
 type chronopostReturn struct {
-	ErrorCode    int                  `xml:"errorCode"`
-	ErrorMessage string               `xml:"errorMessage"`
-	ListEvents   []chronopostEventSet `xml:"listEvents"`
+	ErrorCode         int                    `xml:"errorCode"`
+	ErrorMessage      string                 `xml:"errorMessage"`
+	ListEventInfoComp chronopostEventInfoComp `xml:"listEventInfoComp"`
 }
 
-type chronopostEventSet struct {
-	Events []chronopostEvent `xml:"events"`
+type chronopostEventInfoComp struct {
+	SkybillNumber string              `xml:"skybillNumber"`
+	Events        []chronopostEvent   `xml:"events"`
 }
 
 type chronopostEvent struct {
-	Code     string `xml:"code"`
-	Label    string `xml:"eventLabel"`
-	Date     string `xml:"eventDate"`
-	Site     string `xml:"eventSite"`
-	ZipCode  string `xml:"zipCode"`
+	Code        string `xml:"code"`
+	Label       string `xml:"eventLabel"`
+	Date        string `xml:"eventDate"`
+	OfficeLabel string `xml:"officeLabel"`
+	ZipCode     string `xml:"zipCode"`
 }
 
 func parseChronopostResponse(data []byte) ([]model.TrackingEvent, error) {
@@ -133,22 +134,20 @@ func parseChronopostResponse(data []byte) ([]model.TrackingEvent, error) {
 	}
 
 	var events []model.TrackingEvent
-	for _, set := range ret.ListEvents {
-		for _, e := range set.Events {
-			ts, err := parseChronopostDate(e.Date)
-			if err != nil {
-				continue
-			}
-
-			location := buildLocation(e.Site, e.ZipCode)
-
-			events = append(events, model.TrackingEvent{
-				Status:    mapChronopostStatus(e.Code),
-				Message:   e.Label,
-				Location:  location,
-				Timestamp: ts,
-			})
+	for _, e := range ret.ListEventInfoComp.Events {
+		ts, err := parseChronopostDate(e.Date)
+		if err != nil {
+			continue
 		}
+
+		location := buildLocation(e.OfficeLabel, e.ZipCode)
+
+		events = append(events, model.TrackingEvent{
+			Status:    mapChronopostStatus(e.Code),
+			Message:   e.Label,
+			Location:  location,
+			Timestamp: ts,
+		})
 	}
 
 	return events, nil

@@ -13,42 +13,42 @@ import (
 const testChronopostResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
   <soap:Body>
-    <ns1:trackSkybillV2Response xmlns:ns1="http://cxf.tracking.soap.chronopost.fr/">
+    <ns2:trackSkybillV2Response xmlns:ns2="http://cxf.tracking.soap.chronopost.fr/">
       <return>
         <errorCode>0</errorCode>
-        <errorMessage></errorMessage>
-        <listEvents>
+        <listEventInfoComp>
+          <skybillNumber>XY123456789</skybillNumber>
           <events>
             <code>RG</code>
             <eventLabel>Prise en charge de votre colis</eventLabel>
-            <eventDate>2025-06-01T10:00:00</eventDate>
-            <eventSite>PARIS</eventSite>
+            <eventDate>2025-06-01T10:00:00+02:00</eventDate>
+            <officeLabel>PARIS</officeLabel>
             <zipCode>75001</zipCode>
           </events>
           <events>
             <code>TA1</code>
             <eventLabel>Colis en cours d'acheminement</eventLabel>
-            <eventDate>2025-06-02T08:30:00</eventDate>
-            <eventSite>HUB LYON</eventSite>
+            <eventDate>2025-06-02T08:30:00+02:00</eventDate>
+            <officeLabel>HUB LYON</officeLabel>
             <zipCode>69000</zipCode>
           </events>
           <events>
             <code>SD1</code>
             <eventLabel>Colis en cours de livraison</eventLabel>
-            <eventDate>2025-06-03T07:00:00</eventDate>
-            <eventSite>MARSEILLE</eventSite>
+            <eventDate>2025-06-03T07:00:00+02:00</eventDate>
+            <officeLabel>MARSEILLE</officeLabel>
             <zipCode>13001</zipCode>
           </events>
           <events>
             <code>D1</code>
             <eventLabel>Colis livre</eventLabel>
-            <eventDate>2025-06-03T14:23:00</eventDate>
-            <eventSite>MARSEILLE</eventSite>
+            <eventDate>2025-06-03T14:23:00+02:00</eventDate>
+            <officeLabel>MARSEILLE</officeLabel>
             <zipCode>13001</zipCode>
           </events>
-        </listEvents>
+        </listEventInfoComp>
       </return>
-    </ns1:trackSkybillV2Response>
+    </ns2:trackSkybillV2Response>
   </soap:Body>
 </soap:Envelope>`
 
@@ -137,13 +137,13 @@ func TestParseChronopostResponseError(t *testing.T) {
 	errorResponse := `<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
   <soap:Body>
-    <ns1:trackSkybillV2Response xmlns:ns1="http://cxf.tracking.soap.chronopost.fr/">
+    <ns2:trackSkybillV2Response xmlns:ns2="http://cxf.tracking.soap.chronopost.fr/">
       <return>
         <errorCode>1</errorCode>
         <errorMessage>Tracking number not found</errorMessage>
-        <listEvents/>
+        <listEventInfoComp/>
       </return>
-    </ns1:trackSkybillV2Response>
+    </ns2:trackSkybillV2Response>
   </soap:Body>
 </soap:Envelope>`
 
@@ -202,6 +202,8 @@ func TestParseChronopostDate(t *testing.T) {
 		input string
 		ok    bool
 	}{
+		{"2025-06-01T10:00:00+02:00", true},
+		{"2025-06-01T10:00:00Z", true},
 		{"2025-06-01T10:00:00", true},
 		{"2025-06-01T10:00:00.000", true},
 		{"2025-06-01 10:00:00", true},
