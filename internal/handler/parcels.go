@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"net/http"
 	"time"
@@ -91,19 +92,27 @@ func (h *Handler) CreateParcel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Auto-refresh: fetch initial tracking events for non-manual carriers.
+	// Auto-refresh in background: don't block the response waiting for carrier APIs.
 	if t, ok := h.Tracker.Get(created.Carrier); ok && created.Carrier != model.CarrierManual {
-		if events, err := t.Track(r.Context(), created.TrackingNumber); err == nil {
-			for _, e := range events {
-				e.ParcelID = created.ID
-				h.Store.CreateEvent(r.Context(), e)
+		parcelID := created.ID
+		trackingNumber := created.TrackingNumber
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			events, err := t.Track(ctx, trackingNumber)
+			if err != nil {
+				return
 			}
-			// Re-read to pick up status set by CreateEvent before updating last_check.
-			created, _ = h.Store.GetParcel(r.Context(), created.ID)
-			now := time.Now().UTC()
-			created.LastCheck = &now
-			h.Store.UpdateParcel(r.Context(), created)
-		}
+			for _, e := range events {
+				e.ParcelID = parcelID
+				h.Store.CreateEvent(ctx, e)
+			}
+			if p, err := h.Store.GetParcel(ctx, parcelID); err == nil {
+				now := time.Now().UTC()
+				p.LastCheck = &now
+				h.Store.UpdateParcel(ctx, p)
+			}
+		}()
 	}
 
 	writeJSON(w, http.StatusCreated, created)
