@@ -12,6 +12,7 @@ type Config struct {
 	Password        string
 	Dev             bool
 	RefreshInterval time.Duration
+	LaPosteAPIKey   string
 }
 
 func Load() Config {
@@ -21,6 +22,7 @@ func Load() Config {
 		Password:        envStr("PARCEL_TRACKER_PASSWORD", ""),
 		Dev:             envStr("DEV", "") != "",
 		RefreshInterval: envDuration("REFRESH_INTERVAL", 30*time.Minute),
+		LaPosteAPIKey:   envStr("LAPOSTE_API_KEY", ""),
 	}
 }
 
