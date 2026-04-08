@@ -146,7 +146,7 @@ func parseChronopostResponse(data []byte) ([]model.TrackingEvent, error) {
 			Status:    mapChronopostStatus(e.Code),
 			Message:   e.Label,
 			Location:  location,
-			Timestamp: ts,
+			Timestamp: ts.UTC(),
 		})
 	}
 
