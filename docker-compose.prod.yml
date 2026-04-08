@@ -1,0 +1,23 @@
+services:
+  parcel-tracker:
+    image: ghcr.io/simonbrunou/parcel-tracker:main
+    ports:
+      - "8080:8080"
+    volumes:
+      - parcel-data:/data
+    environment:
+      - PARCEL_TRACKER_PASSWORD=changeme
+    restart: unless-stopped
+
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=300
+      - WATCHTOWER_LABEL_ENABLE=false
+    restart: unless-stopped
+
+volumes:
+  parcel-data:
