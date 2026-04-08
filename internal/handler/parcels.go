@@ -9,6 +9,7 @@ import (
 
 	"github.com/simonbrunou/parcel-tracker/internal/model"
 	"github.com/simonbrunou/parcel-tracker/internal/store"
+	"github.com/simonbrunou/parcel-tracker/internal/tracker"
 )
 
 type createParcelRequest struct {
@@ -185,12 +186,11 @@ func (h *Handler) RefreshParcel(w http.ResponseWriter, r *http.Request) {
 	existing, _ := h.Store.ListEvents(r.Context(), parcel.ID)
 	seen := make(map[string]bool, len(existing))
 	for _, e := range existing {
-		seen[e.Timestamp.UTC().Format("2006-01-02T15:04:05")+"|"+string(e.Status)+"|"+e.Message] = true
+		seen[tracker.EventKey(e)] = true
 	}
 
 	for _, e := range events {
-		key := e.Timestamp.UTC().Format("2006-01-02T15:04:05") + "|" + string(e.Status) + "|" + e.Message
-		if seen[key] {
+		if seen[tracker.EventKey(e)] {
 			continue
 		}
 		e.ParcelID = parcel.ID

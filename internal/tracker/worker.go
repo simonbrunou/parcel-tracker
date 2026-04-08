@@ -91,12 +91,12 @@ func (w *Worker) refreshParcel(ctx context.Context, p model.Parcel) {
 	}
 	seen := make(map[string]bool, len(existing))
 	for _, e := range existing {
-		seen[eventKey(e)] = true
+		seen[EventKey(e)] = true
 	}
 
 	newCount := 0
 	for _, e := range events {
-		if seen[eventKey(e)] {
+		if seen[EventKey(e)] {
 			continue
 		}
 		e.ParcelID = p.ID
@@ -123,7 +123,8 @@ func (w *Worker) refreshParcel(ctx context.Context, p model.Parcel) {
 	}
 }
 
-// eventKey returns a deduplication key for a tracking event.
-func eventKey(e model.TrackingEvent) string {
+// EventKey returns a deduplication key for a tracking event.
+// Used by both the background worker and the HTTP refresh handler.
+func EventKey(e model.TrackingEvent) string {
 	return e.Timestamp.UTC().Format(time.RFC3339) + "|" + string(e.Status) + "|" + e.Message
 }
