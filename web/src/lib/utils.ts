@@ -58,6 +58,7 @@ export const CARRIER_LABELS: Record<string, string> = {
   dhl: "DHL",
   postnl: "PostNL",
   colissimo: "Colissimo",
+  chronopost: "Chronopost",
   laposte: "La Poste",
 };
 

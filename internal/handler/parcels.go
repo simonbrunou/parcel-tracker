@@ -98,10 +98,11 @@ func (h *Handler) CreateParcel(w http.ResponseWriter, r *http.Request) {
 				e.ParcelID = created.ID
 				h.Store.CreateEvent(r.Context(), e)
 			}
+			// Re-read to pick up status set by CreateEvent before updating last_check.
+			created, _ = h.Store.GetParcel(r.Context(), created.ID)
 			now := time.Now().UTC()
 			created.LastCheck = &now
 			h.Store.UpdateParcel(r.Context(), created)
-			created, _ = h.Store.GetParcel(r.Context(), created.ID)
 		}
 	}
 
@@ -197,12 +198,13 @@ func (h *Handler) RefreshParcel(w http.ResponseWriter, r *http.Request) {
 		h.Store.CreateEvent(r.Context(), e)
 	}
 
-	// Update last_check timestamp.
+	// Re-read parcel to pick up status changes made by CreateEvent,
+	// then update last_check. Without this re-read, UpdateParcel would
+	// overwrite the status back to its pre-refresh value.
+	parcel, _ = h.Store.GetParcel(r.Context(), id)
 	now := time.Now().UTC()
 	parcel.LastCheck = &now
 	h.Store.UpdateParcel(r.Context(), parcel)
 
-	// Return updated parcel
-	parcel, _ = h.Store.GetParcel(r.Context(), id)
 	writeJSON(w, http.StatusOK, parcel)
 }
