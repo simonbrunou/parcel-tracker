@@ -2,6 +2,7 @@ package tracker
 
 import (
 	"context"
+	"os"
 
 	"github.com/simonbrunou/parcel-tracker/internal/model"
 )
@@ -28,9 +29,19 @@ func NewRegistry() *Registry {
 	r := &Registry{
 		trackers: make(map[model.CarrierCode]Tracker),
 	}
+
+	laPosteAPIKey := os.Getenv("LAPOSTE_API_KEY")
+
 	r.Register(&ManualTracker{})
 	r.Register(&MockTracker{})
 	r.Register(&ChronopostTracker{})
+	r.Register(&LaPosteTracker{APIKey: laPosteAPIKey})
+	r.Register(&ColissimoTracker{APIKey: laPosteAPIKey})
+	r.Register(&GLSTracker{})
+	r.Register(&MondialRelayTracker{})
+	r.Register(&DPDTracker{})
+	r.Register(&ColisPriveTracker{})
+	r.Register(&RelaisColisTracker{})
 	return r
 }
 
