@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { STATUS_LABELS, STATUS_COLORS } from "../lib/utils";
+  import { STATUS_COLORS } from "../lib/utils";
+  import { getStatusLabel } from "../lib/i18n.svelte";
 
   let { status }: { status: string } = $props();
 
-  const label = $derived(STATUS_LABELS[status] || status);
+  const label = $derived(getStatusLabel(status));
   const colorClass = $derived(STATUS_COLORS[status] || STATUS_COLORS["unknown"]);
 </script>
 

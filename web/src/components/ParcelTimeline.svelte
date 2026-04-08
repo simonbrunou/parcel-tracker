@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { TrackingEvent } from "../lib/api";
-  import { STATUS_LABELS, STATUS_COLORS, formatDateTime } from "../lib/utils";
+  import { STATUS_COLORS, formatDateTime } from "../lib/utils";
+  import { getStatusLabel, t } from "../lib/i18n.svelte";
 
   let { events }: { events: TrackingEvent[] } = $props();
 </script>
@@ -10,7 +11,7 @@
     <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
-    <p>No tracking events yet</p>
+    <p>{t("timeline.empty")}</p>
   </div>
 {:else}
   <ol class="relative">
@@ -38,7 +39,7 @@
           <div class="flex flex-wrap gap-2 mt-1 text-xs text-[var(--color-text-muted)]">
             <span class="inline-flex items-center gap-1">
               <span class="w-1.5 h-1.5 rounded-full {STATUS_COLORS[event.status] || 'bg-[var(--color-status-unknown)]'}"></span>
-              {STATUS_LABELS[event.status] || event.status}
+              {getStatusLabel(event.status)}
             </span>
             {#if event.location}
               <span>&middot; {event.location}</span>
