@@ -20,6 +20,7 @@
   let parcel = $state<Parcel | null>(null);
   let events = $state<TrackingEvent[]>([]);
   let loading = $state(true);
+  let error = $state("");
   let refreshing = $state(false);
   let showDelete = $state(false);
   let showAddEvent = $state(false);
@@ -38,6 +39,7 @@
 
   async function load() {
     loading = true;
+    error = "";
     try {
       const [p, e] = await Promise.all([
         getParcel(params.id),
@@ -45,8 +47,12 @@
       ]);
       parcel = p;
       events = e;
-    } catch {
-      push("/");
+    } catch (err: any) {
+      if (err?.status === 404) {
+        push("/");
+        return;
+      }
+      error = err?.message || "Failed to load parcel";
     } finally {
       loading = false;
     }
@@ -119,6 +125,24 @@
       <div class="h-8 bg-[var(--color-border)] rounded w-1/3"></div>
       <div class="h-4 bg-[var(--color-border)] rounded w-1/2"></div>
       <div class="h-48 bg-[var(--color-border)] rounded-xl"></div>
+    </div>
+  {:else if error}
+    <div class="text-center py-16">
+      <p class="text-[var(--color-danger)] text-lg mb-4">{error}</p>
+      <div class="flex gap-3 justify-center">
+        <button
+          onclick={() => load()}
+          class="px-4 py-2 bg-[var(--color-accent)] text-white rounded-lg hover:bg-[var(--color-accent-hover)] transition-colors cursor-pointer"
+        >
+          Retry
+        </button>
+        <button
+          onclick={() => push("/")}
+          class="px-4 py-2 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer"
+        >
+          Back
+        </button>
+      </div>
     </div>
   {:else if parcel}
     <!-- Back + Actions -->
