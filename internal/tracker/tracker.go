@@ -30,6 +30,7 @@ func NewRegistry() *Registry {
 	}
 	r.Register(&ManualTracker{})
 	r.Register(&MockTracker{})
+	r.Register(&ChronopostTracker{})
 	return r
 }
 

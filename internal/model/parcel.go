@@ -24,8 +24,9 @@ const (
 	CarrierUPS     CarrierCode = "ups"
 	CarrierDHL     CarrierCode = "dhl"
 	CarrierPostNL  CarrierCode = "postnl"
-	CarrierColissimo CarrierCode = "colissimo"
-	CarrierLaPoste CarrierCode = "laposte"
+	CarrierColissimo   CarrierCode = "colissimo"
+	CarrierChronopost  CarrierCode = "chronopost"
+	CarrierLaPoste     CarrierCode = "laposte"
 )
 
 type Parcel struct {
