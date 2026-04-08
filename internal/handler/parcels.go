@@ -3,6 +3,7 @@ package handler
 import (
 	"database/sql"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -166,10 +167,26 @@ func (h *Handler) RefreshParcel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Load existing events to avoid duplicates.
+	existing, _ := h.Store.ListEvents(r.Context(), parcel.ID)
+	seen := make(map[string]bool, len(existing))
+	for _, e := range existing {
+		seen[e.Timestamp.UTC().Format("2006-01-02T15:04:05")+"|"+string(e.Status)+"|"+e.Message] = true
+	}
+
 	for _, e := range events {
+		key := e.Timestamp.UTC().Format("2006-01-02T15:04:05") + "|" + string(e.Status) + "|" + e.Message
+		if seen[key] {
+			continue
+		}
 		e.ParcelID = parcel.ID
 		h.Store.CreateEvent(r.Context(), e)
 	}
+
+	// Update last_check timestamp.
+	now := time.Now().UTC()
+	parcel.LastCheck = &now
+	h.Store.UpdateParcel(r.Context(), parcel)
 
 	// Return updated parcel
 	parcel, _ = h.Store.GetParcel(r.Context(), id)

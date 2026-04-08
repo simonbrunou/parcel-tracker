@@ -75,6 +75,20 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
+	// Background tracking worker
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+	defer workerCancel()
+
+	if cfg.RefreshInterval > 0 {
+		w := &tracker.Worker{
+			Store:    db,
+			Registry: registry,
+			Interval: cfg.RefreshInterval,
+			Logger:   logger,
+		}
+		go w.Run(workerCtx)
+	}
+
 	// Graceful shutdown
 	go func() {
 		sigCh := make(chan os.Signal, 1)
@@ -82,6 +96,7 @@ func main() {
 		<-sigCh
 
 		logger.Info("shutting down...")
+		workerCancel()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		srv.Shutdown(ctx)
