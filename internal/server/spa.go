@@ -23,7 +23,7 @@ func SPAHandler(distFS fs.FS) http.Handler {
 			f.Close()
 
 			// Serve hashed assets with aggressive caching
-			if strings.Contains(path, "/assets/") {
+			if strings.HasPrefix(path, "assets/") {
 				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 			}
 
