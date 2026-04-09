@@ -24,7 +24,7 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("create db directory: %w", err)
 	}
 
-	db, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=1")
+	db, err := sql.Open("sqlite", dbPath+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)")
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
@@ -222,9 +222,11 @@ func (s *SQLiteStore) CreateEvent(ctx context.Context, e model.TrackingEvent) (m
 	}
 
 	// Update parcel status and timestamp
-	s.db.ExecContext(ctx,
+	if _, err := s.db.ExecContext(ctx,
 		"UPDATE parcels SET status = ?, updated_at = ? WHERE id = ?",
-		e.Status, time.Now().UTC(), e.ParcelID)
+		e.Status, time.Now().UTC(), e.ParcelID); err != nil {
+		return e, fmt.Errorf("update parcel status: %w", err)
+	}
 
 	return e, nil
 }

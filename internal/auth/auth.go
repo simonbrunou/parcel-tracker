@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -24,6 +25,7 @@ const (
 
 type Auth struct {
 	store store.Store
+	mu    sync.Mutex
 }
 
 func New(s store.Store) *Auth {
@@ -129,6 +131,9 @@ func ExtractToken(r *http.Request) string {
 }
 
 func (a *Auth) jwtSecret(ctx context.Context) ([]byte, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
 	secretHex, err := a.store.GetSetting(ctx, settingJWTSecret)
 	if err != nil {
 		return nil, err

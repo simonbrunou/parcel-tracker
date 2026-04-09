@@ -1,136 +1,40 @@
 # Test Coverage Analysis
 
-_Generated: 2026-04-09_
+_Updated: 2026-04-09_
 
-## Current State
+## Coverage Summary
 
-Overall test coverage is low. Only `internal/tracker` has tests (53.1% — parsing helpers only). All other Go packages and the entire frontend have 0% coverage.
-
-| Package | Coverage | Test Files | Notes |
+| Package | Before | After | Tests Added |
 |---|---|---|---|
-| `internal/tracker` | **53.1%** | 8 files, 49 tests | Parsing, status mapping, dates |
-| `internal/auth` | **0%** | 0 | Security-critical |
-| `internal/handler` | **0%** | 0 | All HTTP handlers |
-| `internal/store` | **0%** | 0 | SQLite data layer |
-| `internal/server` | **0%** | 0 | Router, middleware, SPA |
-| `internal/config` | **0%** | 0 | Env var parsing |
-| `internal/model` | N/A | 0 | Constants only |
-| `web/` (frontend) | **0%** | 0 | No test framework configured |
+| `internal/auth` | 0% | **86.7%** | 15 tests |
+| `internal/config` | 0% | **100.0%** | 4 tests |
+| `internal/handler` | 0% | **72.1%** | 28 tests |
+| `internal/server` | 0% | **97.6%** | 6 tests |
+| `internal/store` | 0% | **86.6%** | 18 tests |
+| `internal/tracker` | 53.1% | **65.8%** | 14 tests |
+| `internal/model` | N/A | N/A | Constants only |
+| `web/` (frontend) | 0% | 0% | No test framework |
 
-### What's Tested Well
+## Bugs Fixed
 
-The tracker package tests follow good patterns:
-- `httptest.NewServer` for mocking carrier APIs
-- Table-driven tests for status mapping and date parsing
-- Error case coverage (missing API keys, malformed responses, SOAP faults)
-- Tests for all 8 real carrier implementations' parsing logic
+### 1. Unchecked error in `CreateEvent` (`store/sqlite.go:225`)
 
-### What's Not Tested
+`CreateEvent()` updated parcel status but ignored the error return. Now properly checked.
 
-Within the tracker package, `Track()` methods, `Registry`, `Worker`, and `EventKey()` have 0% coverage.
+### 2. Race condition in `jwtSecret` (`auth/auth.go:131`)
 
----
+Multiple goroutines calling `jwtSecret()` simultaneously could generate and save different secrets, invalidating tokens. Added `sync.Mutex` to serialize secret generation.
 
-## Recommended Improvements (Priority Order)
+### 3. Foreign keys not enforced (`store/sqlite.go:27`)
 
-### 1. `internal/auth` — High Priority (Security-Critical)
+The `_foreign_keys=1` connection parameter wasn't recognized by the `modernc.org/sqlite` driver. Changed to `_pragma=foreign_keys(1)` format which is properly applied. This means `ON DELETE CASCADE` on tracking events now works correctly.
 
-**Why:** Handles authentication for the entire application. Bugs here mean unauthorized access.
+### 4. SPA cache header never set (`server/spa.go:26`)
 
-**Tests to add:**
-- `Setup()` — hashes password, stores it, prevents duplicate setup (409)
-- `Login()` — correct password returns JWT, wrong password fails
-- `Verify()` — valid token passes, expired token rejected, tampered token rejected
-- `AuthMiddleware()` — missing token returns 401, valid token passes request through
-- `ExtractToken()` — reads cookie first, falls back to Authorization Bearer header
-- `SetSessionCookie()` / `ClearSessionCookie()` — correct cookie attributes (HttpOnly, SameSite, MaxAge)
+The check `strings.Contains(path, "/assets/")` never matched because the leading slash was already trimmed. Changed to `strings.HasPrefix(path, "assets/")`.
 
-**Approach:** Use an in-memory SQLite store (or mock Store interface) to avoid filesystem dependencies. Consider a lower bcrypt cost for test speed.
+## Remaining Gaps
 
-**Bug found — `jwtSecret()` race condition** (`auth.go:131`): Multiple goroutines calling `jwtSecret()` simultaneously could both generate and save different secrets. Needs a mutex or `sync.Once`.
-
-### 2. `internal/store` — High Priority (Data Integrity)
-
-**Why:** All data flows through here. Bugs mean data loss or corruption.
-
-**Tests to add:**
-- `CreateParcel` / `GetParcel` / `UpdateParcel` / `DeleteParcel` — CRUD round-trip
-- `ListParcels` — filter by status, search (case-insensitive LIKE), archived flag, ordering by updated_at
-- `CreateEvent` — verify the side-effect that updates parcel status
-- `DeleteEvent` — verify 404 behavior
-- `GetSetting` / `SetSetting` — round-trip, missing key returns empty string
-- `migrate()` — schema creation with tables, indexes, foreign keys
-
-**Approach:** Use `:memory:` SQLite for fast, isolated tests. Each test gets a fresh database.
-
-**Bug found — unchecked error** (`sqlite.go:225-227`): `CreateEvent()` fires an UPDATE to change parcel status but ignores the error return:
-```go
-s.db.ExecContext(ctx,
-    "UPDATE parcels SET status = ?, updated_at = ? WHERE id = ?",
-    e.Status, time.Now().UTC(), e.ParcelID)
-// Error not checked!
-```
-
-### 3. `internal/handler` — High Priority (API Correctness)
-
-**Why:** Contains business logic beyond routing — deduplication, background refresh, validation.
-
-**Tests to add:**
-- `RefreshParcel()` — event deduplication via `EventKey()`, re-fetches parcel mid-operation to avoid stale status
-- `CreateParcel()` — validation (tracking_number required), defaults carrier to "manual", background refresh goroutine
-- `Setup()` — calls `auth.Setup` then `auth.Login` in sequence, handles partial failure
-- `CheckAuth()` — distinguishes "not configured" (needs setup) from "unauthorized"
-- All endpoints — 400 (bad input), 404 (missing resource), 500 (store error) paths
-- `writeJSON()`, `writeError()`, `decodeJSON()` — utility functions (easy wins)
-
-**Approach:** Mock the `Store` interface and `tracker.Registry`. Test handlers via `httptest.NewRecorder`.
-
-**Bug found — silent goroutine errors** (`parcels.go:99`): `CreateParcel` spawns a background goroutine for auto-refresh that silently discards errors — tracking failures are invisible.
-
-### 4. `internal/tracker` — Worker & Registry (Medium Priority)
-
-**Why:** The worker runs continuously in production; deduplication bugs mean duplicate events.
-
-**Tests to add:**
-- `Registry` — `Register()`, `Get()`, `Available()` basic operations
-- `NewRegistry()` — all expected carriers are registered
-- `EventKey()` — generates consistent dedup keys from timestamp+status+message
-- `Worker.refreshAll()` — skips archived parcels, terminal statuses, manual carrier
-- `Worker.refreshParcel()` — deduplicates events, updates last_check
-- All carrier `Track()` methods — end-to-end with httptest mocking (currently 0%)
-
-**Approach:** Mock Store + mock Tracker implementations. For the worker, use short intervals and context cancellation.
-
-### 5. `internal/config` — Low Priority (Simple but Useful)
-
-**Why:** Silent fallback on parse errors could cause surprising production behavior.
-
-**Tests to add:**
-- `Load()` with all env vars set, with none set (defaults), with invalid values
-- `envInt()` / `envDuration()` — verify they silently fall back on parse errors (document this behavior)
-
-**Approach:** Set `os.Setenv` in tests, defer cleanup with `t.Cleanup`.
-
-### 6. Frontend — Low Priority (Requires Infrastructure Setup)
-
-**Why:** No test framework exists. Setup cost is high but enables testing complex components.
-
-**Infrastructure needed:** Vitest + `@testing-library/svelte` + `jsdom`
-
-**Tests to add (once infrastructure exists):**
-- `lib/utils.ts` — `formatRelativeTime()` edge cases (just now, minutes, hours, days)
-- `lib/api.ts` — error handling, 401 redirect logic, type parsing
-- `lib/i18n.svelte.ts` — locale detection, fallbacks, parameter substitution
-- `pages/ParcelDetail.svelte` — most complex component (edit, refresh, archive, delete)
-
----
-
-## Summary
-
-The most impactful improvements, in order:
-1. **Auth tests** — prevent security regressions, fix the race condition
-2. **Store tests** — prevent data bugs, fix the unchecked error in CreateEvent
-3. **Handler tests** — cover business logic and error paths
-4. **Worker/Registry tests** — cover background processing and deduplication
-5. **Config tests** — document silent fallback behavior
-6. **Frontend test setup** — long-term investment for UI reliability
+- **Tracker `Track()` methods**: End-to-end HTTP calls for each carrier remain untested
+- **Handler background goroutine**: `CreateParcel` auto-refresh silently discards errors
+- **Frontend**: No test framework (would need Vitest + @testing-library/svelte)
