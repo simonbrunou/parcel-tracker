@@ -14,8 +14,9 @@ type MockTracker struct{}
 func (t *MockTracker) Code() model.CarrierCode { return model.CarrierMock }
 func (t *MockTracker) Name() string             { return "Mock (Demo)" }
 
-func (t *MockTracker) Track(_ context.Context, trackingNumber string) ([]model.TrackingEvent, error) {
+func (t *MockTracker) Track(_ context.Context, trackingNumber string) (TrackResult, error) {
 	now := time.Now().UTC()
+	estimatedDelivery := now.Add(-1 * time.Hour)
 	events := []model.TrackingEvent{
 		{
 			Status:    model.StatusInfoReceived,
@@ -48,5 +49,5 @@ func (t *MockTracker) Track(_ context.Context, trackingNumber string) ([]model.T
 			Timestamp: now.Add(-1 * time.Hour),
 		},
 	}
-	return events, nil
+	return TrackResult{Events: events, EstimatedDelivery: &estimatedDelivery}, nil
 }

@@ -30,41 +30,60 @@ func (t *DPDTracker) httpClient() *http.Client {
 	return &http.Client{Timeout: 15 * time.Second}
 }
 
-func (t *DPDTracker) Track(ctx context.Context, trackingNumber string) ([]model.TrackingEvent, error) {
+func (t *DPDTracker) Track(ctx context.Context, trackingNumber string) (TrackResult, error) {
 	url := dpdTrackingURL + trackingNumber
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("dpd: build request: %w", err)
+		return TrackResult{}, fmt.Errorf("dpd: build request: %w", err)
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; ParcelTracker/1.0)")
 	req.Header.Set("Accept", "text/html")
 
 	resp, err := t.httpClient().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("dpd: request failed: %w", err)
+		return TrackResult{}, fmt.Errorf("dpd: request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("dpd: unexpected status %d", resp.StatusCode)
+		return TrackResult{}, fmt.Errorf("dpd: unexpected status %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("dpd: read response: %w", err)
+		return TrackResult{}, fmt.Errorf("dpd: read response: %w", err)
 	}
 
 	return parseDPDHTML(body)
 }
 
-func parseDPDHTML(data []byte) ([]model.TrackingEvent, error) {
+func parseDPDHTML(data []byte) (TrackResult, error) {
 	doc, err := html.Parse(strings.NewReader(string(data)))
 	if err != nil {
-		return nil, fmt.Errorf("dpd: parse html: %w", err)
+		return TrackResult{}, fmt.Errorf("dpd: parse html: %w", err)
 	}
 
-	var events []model.TrackingEvent
+	var result TrackResult
+
+	// Look for estimated delivery date in the page text.
+	var findDeliveryDate func(*html.Node)
+	findDeliveryDate = func(n *html.Node) {
+		if n.Type == html.TextNode {
+			text := strings.TrimSpace(n.Data)
+			lower := strings.ToLower(text)
+			if strings.Contains(lower, "livraison prévue") || strings.Contains(lower, "livraison estimée") {
+				if t, err := extractDateFromText(text); err == nil {
+					utc := t.UTC()
+					result.EstimatedDelivery = &utc
+				}
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			findDeliveryDate(c)
+		}
+	}
+	findDeliveryDate(doc)
 
 	// DPD uses table rows with id containing "ligneTableTrace" for tracking events.
 	// Each row has cells: date, time, label, [location].
@@ -72,7 +91,7 @@ func parseDPDHTML(data []byte) ([]model.TrackingEvent, error) {
 	walk = func(n *html.Node) {
 		if n.Type == html.ElementNode && n.Data == "tr" && hasAttrContaining(n, "id", "ligneTableTrace") {
 			if ev, ok := parseDPDRow(n); ok {
-				events = append(events, ev)
+				result.Events = append(result.Events, ev)
 			}
 			return
 		}
@@ -82,7 +101,7 @@ func parseDPDHTML(data []byte) ([]model.TrackingEvent, error) {
 	}
 	walk(doc)
 
-	return events, nil
+	return result, nil
 }
 
 func parseDPDRow(n *html.Node) (model.TrackingEvent, bool) {

@@ -181,6 +181,9 @@ func TestRefreshParcelCreatesEvents(t *testing.T) {
 	if updated.LastCheck == nil {
 		t.Error("expected LastCheck to be set")
 	}
+	if updated.EstimatedDelivery == nil {
+		t.Error("expected EstimatedDelivery to be set by mock tracker")
+	}
 }
 
 func TestRefreshParcelDeduplicatesEvents(t *testing.T) {

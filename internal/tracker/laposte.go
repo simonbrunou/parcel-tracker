@@ -32,33 +32,33 @@ func (t *LaPosteTracker) httpClient() *http.Client {
 	return &http.Client{Timeout: 15 * time.Second}
 }
 
-func (t *LaPosteTracker) Track(ctx context.Context, trackingNumber string) ([]model.TrackingEvent, error) {
+func (t *LaPosteTracker) Track(ctx context.Context, trackingNumber string) (TrackResult, error) {
 	if t.APIKey == "" {
-		return nil, fmt.Errorf("laposte: LAPOSTE_API_KEY environment variable is not set")
+		return TrackResult{}, fmt.Errorf("laposte: LAPOSTE_API_KEY environment variable is not set")
 	}
 
 	url := laPosteTrackingURL + trackingNumber + "?lang=fr_FR"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("laposte: build request: %w", err)
+		return TrackResult{}, fmt.Errorf("laposte: build request: %w", err)
 	}
 	req.Header.Set("X-Okapi-Key", t.APIKey)
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := t.httpClient().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("laposte: request failed: %w", err)
+		return TrackResult{}, fmt.Errorf("laposte: request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("laposte: read response: %w", err)
+		return TrackResult{}, fmt.Errorf("laposte: read response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("laposte: unexpected status %d: %s", resp.StatusCode, string(body))
+		return TrackResult{}, fmt.Errorf("laposte: unexpected status %d: %s", resp.StatusCode, string(body))
 	}
 
 	return parseLaPosteResponse(body)
@@ -72,9 +72,10 @@ type laPosteResponse struct {
 }
 
 type laPosteShipment struct {
-	Product     string          `json:"product"`
-	ContextData *laPosteContext `json:"contextData"`
-	Event       []laPosteEvent  `json:"event"`
+	Product      string          `json:"product"`
+	ContextData  *laPosteContext `json:"contextData"`
+	DeliveryDate string          `json:"deliveryDate"`
+	Event        []laPosteEvent  `json:"event"`
 }
 
 type laPosteContext struct {
@@ -88,10 +89,10 @@ type laPosteEvent struct {
 	Date  string `json:"date"`
 }
 
-func parseLaPosteResponse(data []byte) ([]model.TrackingEvent, error) {
+func parseLaPosteResponse(data []byte) (TrackResult, error) {
 	var resp laPosteResponse
 	if err := json.Unmarshal(data, &resp); err != nil {
-		return nil, fmt.Errorf("laposte: parse json: %w", err)
+		return TrackResult{}, fmt.Errorf("laposte: parse json: %w", err)
 	}
 
 	if resp.Shipment == nil {
@@ -99,24 +100,32 @@ func parseLaPosteResponse(data []byte) ([]model.TrackingEvent, error) {
 		if msg == "" {
 			msg = "no shipment data"
 		}
-		return nil, fmt.Errorf("laposte: %s", msg)
+		return TrackResult{}, fmt.Errorf("laposte: %s", msg)
 	}
 
-	var events []model.TrackingEvent
+	var result TrackResult
+
+	if resp.Shipment.DeliveryDate != "" {
+		if t, err := parseLaPosteDate(resp.Shipment.DeliveryDate); err == nil {
+			utc := t.UTC()
+			result.EstimatedDelivery = &utc
+		}
+	}
+
 	for _, e := range resp.Shipment.Event {
 		ts, err := parseLaPosteDate(e.Date)
 		if err != nil {
 			continue
 		}
 
-		events = append(events, model.TrackingEvent{
+		result.Events = append(result.Events, model.TrackingEvent{
 			Status:    mapLaPosteStatus(e.Code),
 			Message:   e.Label,
 			Timestamp: ts.UTC(),
 		})
 	}
 
-	return events, nil
+	return result, nil
 }
 
 func parseLaPosteDate(s string) (time.Time, error) {

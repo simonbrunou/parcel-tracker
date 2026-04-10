@@ -12,6 +12,6 @@ type ManualTracker struct{}
 func (t *ManualTracker) Code() model.CarrierCode { return model.CarrierManual }
 func (t *ManualTracker) Name() string             { return "Manual" }
 
-func (t *ManualTracker) Track(_ context.Context, _ string) ([]model.TrackingEvent, error) {
-	return nil, nil
+func (t *ManualTracker) Track(_ context.Context, _ string) (TrackResult, error) {
+	return TrackResult{}, nil
 }

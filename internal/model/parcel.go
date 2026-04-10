@@ -62,10 +62,11 @@ type Parcel struct {
 	Name           string       `json:"name"`
 	Notes          string       `json:"notes,omitempty"`
 	Status         ParcelStatus `json:"status"`
-	Archived       bool         `json:"archived"`
-	LastCheck      *time.Time   `json:"last_check,omitempty"`
-	CreatedAt      time.Time    `json:"created_at"`
-	UpdatedAt      time.Time    `json:"updated_at"`
+	Archived          bool         `json:"archived"`
+	EstimatedDelivery *time.Time   `json:"estimated_delivery,omitempty"`
+	LastCheck         *time.Time   `json:"last_check,omitempty"`
+	CreatedAt         time.Time    `json:"created_at"`
+	UpdatedAt         time.Time    `json:"updated_at"`
 }
 
 type TrackingEvent struct {

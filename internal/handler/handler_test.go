@@ -521,6 +521,13 @@ func TestRefreshParcelWithMockTracker(t *testing.T) {
 		t.Errorf("expected 5 events from mock tracker, got %d", len(events))
 	}
 
+	// Verify estimated delivery is set
+	var refreshedParcel model.Parcel
+	json.NewDecoder(w.Body).Decode(&refreshedParcel)
+	if refreshedParcel.EstimatedDelivery == nil {
+		t.Error("expected estimated_delivery to be set by mock tracker")
+	}
+
 	// Verify dedup: second refresh should not create duplicates
 	r2, w2 := env.authRequest("POST", "/api/parcels/"+p.ID+"/refresh", nil)
 	r2 = withChiParam(r2, "id", p.ID)

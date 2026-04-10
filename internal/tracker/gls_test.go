@@ -15,6 +15,7 @@ const testGLSResponse = `{
         {"type": "PRODUCT", "value": "Business Parcel"},
         {"type": "WEIGHT", "value": "2.5 kg"}
       ],
+      "estimatedDeliveryDateTime": "2025-06-03",
       "history": [
         {
           "evtDscr": "Le colis a été enregistré par l'expéditeur",
@@ -74,13 +75,17 @@ func TestGLSTrack(t *testing.T) {
 	}))
 	defer server.Close()
 
-	events, err := parseGLSResponse([]byte(testGLSResponse))
+	result, err := parseGLSResponse([]byte(testGLSResponse))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(events) != 4 {
-		t.Fatalf("expected 4 events, got %d", len(events))
+	if len(result.Events) != 4 {
+		t.Fatalf("expected 4 events, got %d", len(result.Events))
+	}
+
+	if result.EstimatedDelivery == nil {
+		t.Fatal("expected estimated delivery to be set")
 	}
 
 	tests := []struct {
@@ -95,7 +100,7 @@ func TestGLSTrack(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		e := events[tt.index]
+		e := result.Events[tt.index]
 		if e.Status != tt.status {
 			t.Errorf("event[%d]: expected status %q, got %q", tt.index, tt.status, e.Status)
 		}

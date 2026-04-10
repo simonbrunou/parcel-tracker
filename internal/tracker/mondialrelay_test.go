@@ -9,6 +9,7 @@ import (
 const testMondialRelayHTML = `<!DOCTYPE html>
 <html>
 <body>
+<div class="delivery-estimate"><p>Livraison estimée le 02/06/2025</p></div>
 <div class="infos-account">
   <div><p>01/06/2025</p></div>
   <div>
@@ -27,13 +28,17 @@ const testMondialRelayHTML = `<!DOCTYPE html>
 </html>`
 
 func TestParseMondialRelayHTML(t *testing.T) {
-	events, err := parseMondialRelayHTML([]byte(testMondialRelayHTML))
+	result, err := parseMondialRelayHTML([]byte(testMondialRelayHTML))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(events) != 4 {
-		t.Fatalf("expected 4 events, got %d", len(events))
+	if len(result.Events) != 4 {
+		t.Fatalf("expected 4 events, got %d", len(result.Events))
+	}
+
+	if result.EstimatedDelivery == nil {
+		t.Fatal("expected estimated delivery to be set")
 	}
 
 	tests := []struct {
@@ -48,7 +53,7 @@ func TestParseMondialRelayHTML(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		e := events[tt.index]
+		e := result.Events[tt.index]
 		if e.Status != tt.status {
 			t.Errorf("event[%d]: expected status %q, got %q", tt.index, tt.status, e.Status)
 		}
@@ -60,12 +65,15 @@ func TestParseMondialRelayHTML(t *testing.T) {
 
 func TestParseMondialRelayHTMLEmpty(t *testing.T) {
 	html := `<!DOCTYPE html><html><body><p>No tracking data</p></body></html>`
-	events, err := parseMondialRelayHTML([]byte(html))
+	result, err := parseMondialRelayHTML([]byte(html))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(events) != 0 {
-		t.Errorf("expected 0 events, got %d", len(events))
+	if len(result.Events) != 0 {
+		t.Errorf("expected 0 events, got %d", len(result.Events))
+	}
+	if result.EstimatedDelivery != nil {
+		t.Error("expected nil estimated delivery for empty response")
 	}
 }
 

@@ -29,28 +29,28 @@ func (t *GLSTracker) httpClient() *http.Client {
 	return &http.Client{Timeout: 15 * time.Second}
 }
 
-func (t *GLSTracker) Track(ctx context.Context, trackingNumber string) ([]model.TrackingEvent, error) {
+func (t *GLSTracker) Track(ctx context.Context, trackingNumber string) (TrackResult, error) {
 	url := glsTrackingURL + "?match=" + trackingNumber
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("gls: build request: %w", err)
+		return TrackResult{}, fmt.Errorf("gls: build request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := t.httpClient().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("gls: request failed: %w", err)
+		return TrackResult{}, fmt.Errorf("gls: request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("gls: read response: %w", err)
+		return TrackResult{}, fmt.Errorf("gls: read response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("gls: unexpected status %d", resp.StatusCode)
+		return TrackResult{}, fmt.Errorf("gls: unexpected status %d", resp.StatusCode)
 	}
 
 	return parseGLSResponse(body)
@@ -63,7 +63,8 @@ type glsResponse struct {
 }
 
 type glsShipment struct {
-	History []glsEvent `json:"history"`
+	History                  []glsEvent `json:"history"`
+	EstimatedDeliveryDateTime string     `json:"estimatedDeliveryDateTime"`
 }
 
 type glsEvent struct {
@@ -79,18 +80,25 @@ type glsAddress struct {
 	CountryCode string `json:"countryCode"`
 }
 
-func parseGLSResponse(data []byte) ([]model.TrackingEvent, error) {
+func parseGLSResponse(data []byte) (TrackResult, error) {
 	var resp glsResponse
 	if err := json.Unmarshal(data, &resp); err != nil {
-		return nil, fmt.Errorf("gls: parse json: %w", err)
+		return TrackResult{}, fmt.Errorf("gls: parse json: %w", err)
 	}
 
 	if len(resp.TuStatus) == 0 {
-		return nil, fmt.Errorf("gls: no shipment data")
+		return TrackResult{}, fmt.Errorf("gls: no shipment data")
 	}
 
 	shipment := resp.TuStatus[0]
-	var events []model.TrackingEvent
+	var result TrackResult
+
+	if shipment.EstimatedDeliveryDateTime != "" {
+		if t, err := parseGLSDate(shipment.EstimatedDeliveryDateTime, ""); err == nil {
+			utc := t.UTC()
+			result.EstimatedDelivery = &utc
+		}
+	}
 
 	for _, e := range shipment.History {
 		ts, err := parseGLSDate(e.Date, e.Time)
@@ -100,7 +108,7 @@ func parseGLSResponse(data []byte) ([]model.TrackingEvent, error) {
 
 		location := buildGLSLocation(e.Address)
 
-		events = append(events, model.TrackingEvent{
+		result.Events = append(result.Events, model.TrackingEvent{
 			Status:    mapGLSStatus(e.EvtDscr),
 			Message:   e.EvtDscr,
 			Location:  location,
@@ -108,16 +116,25 @@ func parseGLSResponse(data []byte) ([]model.TrackingEvent, error) {
 		})
 	}
 
-	return events, nil
+	return result, nil
 }
 
 func parseGLSDate(date, timeStr string) (time.Time, error) {
-	combined := strings.TrimSpace(date) + " " + strings.TrimSpace(timeStr)
+	d := strings.TrimSpace(date)
+	t := strings.TrimSpace(timeStr)
+	var combined string
+	if t != "" {
+		combined = d + " " + t
+	} else {
+		combined = d
+	}
 	formats := []string{
 		"2006-01-02 15:04:05",
 		"2006-01-02 15:04",
+		"2006-01-02",
 		"02/01/2006 15:04:05",
 		"02/01/2006 15:04",
+		"02/01/2006",
 	}
 	for _, f := range formats {
 		if t, err := time.Parse(f, combined); err == nil {
