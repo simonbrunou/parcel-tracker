@@ -30,7 +30,7 @@ func (t *RelaisColisTracker) httpClient() *http.Client {
 	return &http.Client{Timeout: 15 * time.Second}
 }
 
-func (t *RelaisColisTracker) Track(ctx context.Context, trackingNumber string) ([]model.TrackingEvent, error) {
+func (t *RelaisColisTracker) Track(ctx context.Context, trackingNumber string) (TrackResult, error) {
 	form := url.Values{
 		"valeur":        {trackingNumber},
 		"typeRecherche": {"EXP"},
@@ -38,7 +38,7 @@ func (t *RelaisColisTracker) Track(ctx context.Context, trackingNumber string) (
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, relaisColisTrackingURL, strings.NewReader(form.Encode()))
 	if err != nil {
-		return nil, fmt.Errorf("relaiscolis: build request: %w", err)
+		return TrackResult{}, fmt.Errorf("relaiscolis: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
@@ -46,17 +46,17 @@ func (t *RelaisColisTracker) Track(ctx context.Context, trackingNumber string) (
 
 	resp, err := t.httpClient().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("relaiscolis: request failed: %w", err)
+		return TrackResult{}, fmt.Errorf("relaiscolis: request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("relaiscolis: read response: %w", err)
+		return TrackResult{}, fmt.Errorf("relaiscolis: read response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("relaiscolis: unexpected status %d", resp.StatusCode)
+		return TrackResult{}, fmt.Errorf("relaiscolis: unexpected status %d", resp.StatusCode)
 	}
 
 	return parseRelaisColisResponse(body)
@@ -73,8 +73,9 @@ type relaisColisWrapper struct {
 }
 
 type relaisColisData struct {
-	Enseigne        string                   `json:"Enseigne"`
-	ListEvenements  relaisColisEventList     `json:"ListEvenements"`
+	Enseigne             string               `json:"Enseigne"`
+	DateLivraisonEstimee string               `json:"DateLivraisonEstimee"`
+	ListEvenements       relaisColisEventList `json:"ListEvenements"`
 }
 
 type relaisColisEventList struct {
@@ -87,31 +88,39 @@ type relaisColisEvent struct {
 	CodeJUS string `json:"CodeJUS"`
 }
 
-func parseRelaisColisResponse(data []byte) ([]model.TrackingEvent, error) {
+func parseRelaisColisResponse(data []byte) (TrackResult, error) {
 	var resp relaisColisResponse
 	if err := json.Unmarshal(data, &resp); err != nil {
-		return nil, fmt.Errorf("relaiscolis: parse json: %w", err)
+		return TrackResult{}, fmt.Errorf("relaiscolis: parse json: %w", err)
 	}
 
 	if resp.Colis == nil || resp.Colis.Colis == nil {
-		return nil, fmt.Errorf("relaiscolis: no parcel data in response")
+		return TrackResult{}, fmt.Errorf("relaiscolis: no parcel data in response")
 	}
 
-	var events []model.TrackingEvent
+	var result TrackResult
+
+	if resp.Colis.Colis.DateLivraisonEstimee != "" {
+		if t, err := parseRelaisColisDate(resp.Colis.Colis.DateLivraisonEstimee); err == nil {
+			utc := t.UTC()
+			result.EstimatedDelivery = &utc
+		}
+	}
+
 	for _, e := range resp.Colis.Colis.ListEvenements.Evenement {
 		ts, err := parseRelaisColisDate(e.Date)
 		if err != nil {
 			continue
 		}
 
-		events = append(events, model.TrackingEvent{
+		result.Events = append(result.Events, model.TrackingEvent{
 			Status:    mapRelaisColisStatus(e.CodeJUS, e.Libelle),
 			Message:   e.Libelle,
 			Timestamp: ts.UTC(),
 		})
 	}
 
-	return events, nil
+	return result, nil
 }
 
 func parseRelaisColisDate(s string) (time.Time, error) {

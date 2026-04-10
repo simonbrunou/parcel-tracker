@@ -75,6 +75,7 @@ export interface Parcel {
   notes: string;
   status: string;
   archived: boolean;
+  estimated_delivery: string | null;
   last_check: string | null;
   created_at: string;
   updated_at: string;

@@ -10,7 +10,7 @@
     type Parcel,
     type TrackingEvent,
   } from "../lib/api";
-  import { CARRIER_LABELS, STATUS_COLORS, formatRelativeTime } from "../lib/utils";
+  import { CARRIER_LABELS, STATUS_COLORS, formatRelativeTime, formatDateTime } from "../lib/utils";
   import { t, getStatusLabel } from "../lib/i18n.svelte";
   import { addToast } from "../lib/toast.svelte";
   import StatusBadge from "../components/StatusBadge.svelte";
@@ -279,6 +279,12 @@
             <span class="text-[var(--color-text-muted)] w-24 shrink-0">{t("detail.status")}</span>
             <span class="text-[var(--color-text-primary)]">{getStatusLabel(parcel.status)}</span>
           </div>
+          {#if parcel.estimated_delivery && parcel.status !== "delivered"}
+            <div class="flex gap-2">
+              <span class="text-[var(--color-text-muted)] w-24 shrink-0">{t("detail.estimatedDelivery")}</span>
+              <span class="text-[var(--color-text-primary)]">{formatDateTime(parcel.estimated_delivery)}</span>
+            </div>
+          {/if}
           <div class="flex gap-2">
             <span class="text-[var(--color-text-muted)] w-24 shrink-0">{t("detail.added")}</span>
             <span class="text-[var(--color-text-primary)]">{formatRelativeTime(parcel.created_at)}</span>

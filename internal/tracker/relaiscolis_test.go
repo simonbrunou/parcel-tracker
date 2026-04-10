@@ -13,6 +13,7 @@ const testRelaisColisResponse = `{
   "Colis": {
     "Colis": {
       "Enseigne": "TEST",
+      "DateLivraisonEstimee": "03/06/2025 14:00",
       "ListEvenements": {
         "Evenement": [
           {
@@ -62,13 +63,17 @@ func TestRelaisColisTrack(t *testing.T) {
 	}))
 	defer server.Close()
 
-	events, err := parseRelaisColisResponse([]byte(testRelaisColisResponse))
+	result, err := parseRelaisColisResponse([]byte(testRelaisColisResponse))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(events) != 4 {
-		t.Fatalf("expected 4 events, got %d", len(events))
+	if len(result.Events) != 4 {
+		t.Fatalf("expected 4 events, got %d", len(result.Events))
+	}
+
+	if result.EstimatedDelivery == nil {
+		t.Fatal("expected estimated delivery to be set")
 	}
 
 	tests := []struct {
@@ -83,7 +88,7 @@ func TestRelaisColisTrack(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		e := events[tt.index]
+		e := result.Events[tt.index]
 		if e.Status != tt.status {
 			t.Errorf("event[%d]: expected status %q, got %q", tt.index, tt.status, e.Status)
 		}

@@ -59,7 +59,7 @@ func (w *Worker) refreshParcel(ctx context.Context, p model.Parcel) {
 		return
 	}
 
-	events, err := t.Track(ctx, p.TrackingNumber)
+	result, err := t.Track(ctx, p.TrackingNumber)
 	if err != nil {
 		w.Logger.Warn("worker: tracking failed",
 			"parcel_id", p.ID,
@@ -82,7 +82,7 @@ func (w *Worker) refreshParcel(ctx context.Context, p model.Parcel) {
 	}
 
 	newCount := 0
-	for _, e := range events {
+	for _, e := range result.Events {
 		if seen[EventKey(e)] {
 			continue
 		}
@@ -104,6 +104,7 @@ func (w *Worker) refreshParcel(ctx context.Context, p model.Parcel) {
 	}
 	now := time.Now().UTC()
 	updated.LastCheck = &now
+	updated.EstimatedDelivery = result.EstimatedDelivery
 	if _, err := w.Store.UpdateParcel(ctx, updated); err != nil {
 		w.Logger.Error("worker: failed to update parcel", "parcel_id", p.ID, "error", err)
 	}

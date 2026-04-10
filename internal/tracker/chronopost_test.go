@@ -16,6 +16,7 @@ const testChronopostResponse = `<?xml version="1.0" encoding="UTF-8"?>
     <ns2:trackSkybillV2Response xmlns:ns2="http://cxf.tracking.soap.chronopost.fr/">
       <return>
         <errorCode>0</errorCode>
+        <estimatedDeliveryDate>2025-06-03T18:00:00+02:00</estimatedDeliveryDate>
         <listEventInfoComp>
           <skybillNumber>XY123456789</skybillNumber>
           <events>
@@ -75,13 +76,17 @@ func TestChronopostTrack(t *testing.T) {
 	// Parse the test response directly (since we can't easily override the URL
 	// in the Track method, we test the parsing separately and validate the
 	// HTTP integration through the server assertions above).
-	events, err := parseChronopostResponse([]byte(testChronopostResponse))
+	result, err := parseChronopostResponse([]byte(testChronopostResponse))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(events) != 4 {
-		t.Fatalf("expected 4 events, got %d", len(events))
+	if len(result.Events) != 4 {
+		t.Fatalf("expected 4 events, got %d", len(result.Events))
+	}
+
+	if result.EstimatedDelivery == nil {
+		t.Fatal("expected estimated delivery to be set")
 	}
 
 	tests := []struct {
@@ -97,7 +102,7 @@ func TestChronopostTrack(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		e := events[tt.index]
+		e := result.Events[tt.index]
 		if e.Status != tt.status {
 			t.Errorf("event[%d]: expected status %q, got %q", tt.index, tt.status, e.Status)
 		}

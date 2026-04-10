@@ -78,7 +78,17 @@ func (s *SQLiteStore) migrate() error {
 			value TEXT NOT NULL DEFAULT ''
 		);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Add estimated_delivery column if it doesn't exist (migration for existing DBs).
+	_, err = s.db.Exec(`ALTER TABLE parcels ADD COLUMN estimated_delivery DATETIME`)
+	if err != nil && !strings.Contains(err.Error(), "duplicate column") {
+		return err
+	}
+
+	return nil
 }
 
 func newID() string {
@@ -133,7 +143,7 @@ func (s *SQLiteStore) ListParcels(ctx context.Context, filter ParcelFilter) (Pag
 	}
 	offset := (page - 1) * pageSize
 
-	query := "SELECT id, tracking_number, carrier, name, notes, status, archived, last_check, created_at, updated_at FROM parcels" + where + " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
+	query := "SELECT id, tracking_number, carrier, name, notes, status, archived, estimated_delivery, last_check, created_at, updated_at FROM parcels" + where + " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
 	paginatedArgs := append(args, pageSize, offset)
 
 	rows, err := s.db.QueryContext(ctx, query, paginatedArgs...)
@@ -167,7 +177,7 @@ func (s *SQLiteStore) ListParcels(ctx context.Context, filter ParcelFilter) (Pag
 
 func (s *SQLiteStore) ListActiveParcels(ctx context.Context) ([]model.Parcel, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, tracking_number, carrier, name, notes, status, archived, last_check, created_at, updated_at
+		`SELECT id, tracking_number, carrier, name, notes, status, archived, estimated_delivery, last_check, created_at, updated_at
 		 FROM parcels
 		 WHERE archived = 0 AND status NOT IN (?, ?) AND carrier != ?
 		 ORDER BY updated_at DESC`,
@@ -193,7 +203,7 @@ func (s *SQLiteStore) ListActiveParcels(ctx context.Context) ([]model.Parcel, er
 
 func (s *SQLiteStore) GetParcel(ctx context.Context, id string) (model.Parcel, error) {
 	row := s.db.QueryRowContext(ctx,
-		"SELECT id, tracking_number, carrier, name, notes, status, archived, last_check, created_at, updated_at FROM parcels WHERE id = ?", id)
+		"SELECT id, tracking_number, carrier, name, notes, status, archived, estimated_delivery, last_check, created_at, updated_at FROM parcels WHERE id = ?", id)
 	return scanParcelRow(row)
 }
 
@@ -207,9 +217,9 @@ func (s *SQLiteStore) CreateParcel(ctx context.Context, p model.Parcel) (model.P
 	}
 
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO parcels (id, tracking_number, carrier, name, notes, status, archived, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		p.ID, p.TrackingNumber, p.Carrier, p.Name, p.Notes, p.Status, p.Archived, p.CreatedAt, p.UpdatedAt)
+		`INSERT INTO parcels (id, tracking_number, carrier, name, notes, status, archived, estimated_delivery, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.ID, p.TrackingNumber, p.Carrier, p.Name, p.Notes, p.Status, p.Archived, p.EstimatedDelivery, p.CreatedAt, p.UpdatedAt)
 	if err != nil {
 		return model.Parcel{}, err
 	}
@@ -219,9 +229,9 @@ func (s *SQLiteStore) CreateParcel(ctx context.Context, p model.Parcel) (model.P
 func (s *SQLiteStore) UpdateParcel(ctx context.Context, p model.Parcel) (model.Parcel, error) {
 	p.UpdatedAt = time.Now().UTC()
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE parcels SET tracking_number = ?, carrier = ?, name = ?, notes = ?, status = ?, archived = ?, last_check = ?, updated_at = ?
+		`UPDATE parcels SET tracking_number = ?, carrier = ?, name = ?, notes = ?, status = ?, archived = ?, estimated_delivery = ?, last_check = ?, updated_at = ?
 		WHERE id = ?`,
-		p.TrackingNumber, p.Carrier, p.Name, p.Notes, p.Status, p.Archived, p.LastCheck, p.UpdatedAt, p.ID)
+		p.TrackingNumber, p.Carrier, p.Name, p.Notes, p.Status, p.Archived, p.EstimatedDelivery, p.LastCheck, p.UpdatedAt, p.ID)
 	if err != nil {
 		return model.Parcel{}, err
 	}
@@ -328,13 +338,17 @@ type scanner interface {
 
 func scanParcelFields(s scanner) (model.Parcel, error) {
 	var p model.Parcel
+	var estimatedDelivery sql.NullTime
 	var lastCheck sql.NullTime
 	var archived int
-	err := s.Scan(&p.ID, &p.TrackingNumber, &p.Carrier, &p.Name, &p.Notes, &p.Status, &archived, &lastCheck, &p.CreatedAt, &p.UpdatedAt)
+	err := s.Scan(&p.ID, &p.TrackingNumber, &p.Carrier, &p.Name, &p.Notes, &p.Status, &archived, &estimatedDelivery, &lastCheck, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return model.Parcel{}, err
 	}
 	p.Archived = archived != 0
+	if estimatedDelivery.Valid {
+		p.EstimatedDelivery = &estimatedDelivery.Time
+	}
 	if lastCheck.Valid {
 		p.LastCheck = &lastCheck.Time
 	}

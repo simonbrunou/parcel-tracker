@@ -34,10 +34,10 @@ func (t *MondialRelayTracker) httpClient() *http.Client {
 	return &http.Client{Timeout: 15 * time.Second}
 }
 
-func (t *MondialRelayTracker) Track(ctx context.Context, trackingNumber string) ([]model.TrackingEvent, error) {
+func (t *MondialRelayTracker) Track(ctx context.Context, trackingNumber string) (TrackResult, error) {
 	parts := strings.SplitN(trackingNumber, "-", 2)
 	if len(parts) != 2 {
-		return nil, fmt.Errorf("mondialrelay: tracking number must be in format 'expeditionNumber-postalCode' (e.g. '12345678-75001')")
+		return TrackResult{}, fmt.Errorf("mondialrelay: tracking number must be in format 'expeditionNumber-postalCode' (e.g. '12345678-75001')")
 	}
 	expeditionNumber := parts[0]
 	postalCode := parts[1]
@@ -46,36 +46,55 @@ func (t *MondialRelayTracker) Track(ctx context.Context, trackingNumber string) 
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("mondialrelay: build request: %w", err)
+		return TrackResult{}, fmt.Errorf("mondialrelay: build request: %w", err)
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; ParcelTracker/1.0)")
 	req.Header.Set("Accept", "text/html")
 
 	resp, err := t.httpClient().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("mondialrelay: request failed: %w", err)
+		return TrackResult{}, fmt.Errorf("mondialrelay: request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("mondialrelay: unexpected status %d", resp.StatusCode)
+		return TrackResult{}, fmt.Errorf("mondialrelay: unexpected status %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("mondialrelay: read response: %w", err)
+		return TrackResult{}, fmt.Errorf("mondialrelay: read response: %w", err)
 	}
 
 	return parseMondialRelayHTML(body)
 }
 
-func parseMondialRelayHTML(data []byte) ([]model.TrackingEvent, error) {
+func parseMondialRelayHTML(data []byte) (TrackResult, error) {
 	doc, err := html.Parse(strings.NewReader(string(data)))
 	if err != nil {
-		return nil, fmt.Errorf("mondialrelay: parse html: %w", err)
+		return TrackResult{}, fmt.Errorf("mondialrelay: parse html: %w", err)
 	}
 
-	var events []model.TrackingEvent
+	var result TrackResult
+
+	// Look for estimated delivery date in the page text.
+	var findDeliveryDate func(*html.Node)
+	findDeliveryDate = func(n *html.Node) {
+		if n.Type == html.TextNode {
+			text := strings.TrimSpace(n.Data)
+			lower := strings.ToLower(text)
+			if strings.Contains(lower, "livraison estimée") || strings.Contains(lower, "livraison prévue") {
+				if t, err := extractDateFromText(text); err == nil {
+					utc := t.UTC()
+					result.EstimatedDelivery = &utc
+				}
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			findDeliveryDate(c)
+		}
+	}
+	findDeliveryDate(doc)
 
 	// Mondial Relay uses div elements with class "infos-account" for the timeline.
 	// Each block contains a date and sub-events with time and label.
@@ -83,7 +102,7 @@ func parseMondialRelayHTML(data []byte) ([]model.TrackingEvent, error) {
 	walk = func(n *html.Node) {
 		if n.Type == html.ElementNode && n.Data == "div" && hasClass(n, "infos-account") {
 			blockEvents := parseMondialRelayBlock(n)
-			events = append(events, blockEvents...)
+			result.Events = append(result.Events, blockEvents...)
 			return
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
@@ -92,13 +111,13 @@ func parseMondialRelayHTML(data []byte) ([]model.TrackingEvent, error) {
 	}
 	walk(doc)
 
-	if len(events) == 0 {
+	if len(result.Events) == 0 {
 		// Try alternative structure: look for timeline items by other class patterns.
 		var walkAlt func(*html.Node)
 		walkAlt = func(n *html.Node) {
 			if n.Type == html.ElementNode && n.Data == "div" && hasClass(n, "timeline-item") {
 				if ev, ok := parseMondialRelayTimelineItem(n); ok {
-					events = append(events, ev)
+					result.Events = append(result.Events, ev)
 				}
 				return
 			}
@@ -109,7 +128,27 @@ func parseMondialRelayHTML(data []byte) ([]model.TrackingEvent, error) {
 		walkAlt(doc)
 	}
 
-	return events, nil
+	return result, nil
+}
+
+// extractDateFromText tries to find and parse a date from a text string
+// containing patterns like "Livraison estimée le 03/06/2025".
+func extractDateFromText(text string) (time.Time, error) {
+	formats := []string{
+		"02/01/2006",
+		"2006-01-02",
+	}
+	// Try to find a date-like substring in the text.
+	words := strings.Fields(text)
+	for _, word := range words {
+		clean := strings.Trim(word, ".,;:")
+		for _, f := range formats {
+			if t, err := time.Parse(f, clean); err == nil {
+				return t, nil
+			}
+		}
+	}
+	return time.Time{}, fmt.Errorf("no date found in text: %q", text)
 }
 
 func parseMondialRelayBlock(n *html.Node) []model.TrackingEvent {

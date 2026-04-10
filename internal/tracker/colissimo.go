@@ -17,7 +17,7 @@ type ColissimoTracker struct {
 func (t *ColissimoTracker) Code() model.CarrierCode { return model.CarrierColissimo }
 func (t *ColissimoTracker) Name() string             { return "Colissimo" }
 
-func (t *ColissimoTracker) Track(ctx context.Context, trackingNumber string) ([]model.TrackingEvent, error) {
+func (t *ColissimoTracker) Track(ctx context.Context, trackingNumber string) (TrackResult, error) {
 	delegate := &LaPosteTracker{
 		APIKey: t.APIKey,
 		Client: t.Client,

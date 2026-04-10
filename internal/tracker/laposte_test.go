@@ -16,6 +16,7 @@ const testLaPosteResponse = `{
       "originCountry": "FR",
       "arrivalCountry": "FR"
     },
+    "deliveryDate": "2025-06-03T14:23:00+02:00",
     "timeline": [
       {"status": true, "shortLabel": "Pris en charge"},
       {"status": true, "shortLabel": "En cours d'acheminement"},
@@ -68,13 +69,17 @@ func TestLaPosteTrack(t *testing.T) {
 	defer server.Close()
 
 	// Test the response parsing directly.
-	events, err := parseLaPosteResponse([]byte(testLaPosteResponse))
+	result, err := parseLaPosteResponse([]byte(testLaPosteResponse))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(events) != 5 {
-		t.Fatalf("expected 5 events, got %d", len(events))
+	if len(result.Events) != 5 {
+		t.Fatalf("expected 5 events, got %d", len(result.Events))
+	}
+
+	if result.EstimatedDelivery == nil {
+		t.Fatal("expected estimated delivery to be set")
 	}
 
 	tests := []struct {
@@ -90,7 +95,7 @@ func TestLaPosteTrack(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		e := events[tt.index]
+		e := result.Events[tt.index]
 		if e.Status != tt.status {
 			t.Errorf("event[%d]: expected status %q, got %q", tt.index, tt.status, e.Status)
 		}
@@ -127,6 +132,27 @@ func TestLaPosteTrackMissingAPIKey(t *testing.T) {
 	_, err := tracker.Track(context.Background(), "123456789")
 	if err == nil {
 		t.Fatal("expected error for missing API key")
+	}
+}
+
+func TestParseLaPosteResponseNoDeliveryDate(t *testing.T) {
+	response := `{
+	  "shipment": {
+	    "product": "colissimo",
+	    "event": [
+	      {"code": "DR1", "label": "Déclaratif réceptionné", "date": "2025-06-01T10:00:00+02:00"}
+	    ]
+	  }
+	}`
+	result, err := parseLaPosteResponse([]byte(response))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.EstimatedDelivery != nil {
+		t.Error("expected nil estimated delivery when field is absent")
+	}
+	if len(result.Events) != 1 {
+		t.Errorf("expected 1 event, got %d", len(result.Events))
 	}
 }
 

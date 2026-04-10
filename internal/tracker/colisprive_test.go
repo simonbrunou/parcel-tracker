@@ -9,6 +9,7 @@ import (
 const testColisPriveHTML = `<!DOCTYPE html>
 <html>
 <body>
+<div class="delivery-info"><span>Livraison prévue le 03/06/2025</span></div>
 <table>
   <tr class="bandeauText">
     <td>01/06/2025 10:00</td>
@@ -31,13 +32,17 @@ const testColisPriveHTML = `<!DOCTYPE html>
 </html>`
 
 func TestParseColisPriveHTML(t *testing.T) {
-	events, err := parseColisPriveHTML([]byte(testColisPriveHTML))
+	result, err := parseColisPriveHTML([]byte(testColisPriveHTML))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(events) != 4 {
-		t.Fatalf("expected 4 events, got %d", len(events))
+	if len(result.Events) != 4 {
+		t.Fatalf("expected 4 events, got %d", len(result.Events))
+	}
+
+	if result.EstimatedDelivery == nil {
+		t.Fatal("expected estimated delivery to be set")
 	}
 
 	tests := []struct {
@@ -52,7 +57,7 @@ func TestParseColisPriveHTML(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		e := events[tt.index]
+		e := result.Events[tt.index]
 		if e.Status != tt.status {
 			t.Errorf("event[%d]: expected status %q, got %q", tt.index, tt.status, e.Status)
 		}
@@ -64,12 +69,15 @@ func TestParseColisPriveHTML(t *testing.T) {
 
 func TestParseColisPriveHTMLEmpty(t *testing.T) {
 	html := `<!DOCTYPE html><html><body><p>No data</p></body></html>`
-	events, err := parseColisPriveHTML([]byte(html))
+	result, err := parseColisPriveHTML([]byte(html))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(events) != 0 {
-		t.Errorf("expected 0 events, got %d", len(events))
+	if len(result.Events) != 0 {
+		t.Errorf("expected 0 events, got %d", len(result.Events))
+	}
+	if result.EstimatedDelivery != nil {
+		t.Error("expected nil estimated delivery for empty response")
 	}
 }
 

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Parcel } from "../lib/api";
-  import { CARRIER_LABELS, formatRelativeTime } from "../lib/utils";
+  import { CARRIER_LABELS, formatRelativeTime, formatDateTime } from "../lib/utils";
+  import { t } from "../lib/i18n.svelte";
   import StatusBadge from "./StatusBadge.svelte";
   import { push } from "svelte-spa-router";
 
@@ -28,6 +29,11 @@
       <p class="text-xs text-[var(--color-text-muted)] mt-1.5">
         {CARRIER_LABELS[parcel.carrier] || parcel.carrier} &middot; {formatRelativeTime(parcel.updated_at)}
       </p>
+      {#if parcel.estimated_delivery && parcel.status !== "delivered"}
+        <p class="text-xs text-[var(--color-text-secondary)] mt-1">
+          {t("detail.estimatedDelivery")}: {formatDateTime(parcel.estimated_delivery)}
+        </p>
+      {/if}
     </div>
     <StatusBadge status={parcel.status} />
   </div>

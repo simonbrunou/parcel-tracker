@@ -33,29 +33,29 @@ func (t *ChronopostTracker) httpClient() *http.Client {
 	return &http.Client{Timeout: 15 * time.Second}
 }
 
-func (t *ChronopostTracker) Track(ctx context.Context, trackingNumber string) ([]model.TrackingEvent, error) {
+func (t *ChronopostTracker) Track(ctx context.Context, trackingNumber string) (TrackResult, error) {
 	body := buildChronopostSOAPRequest(trackingNumber, "fr")
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, chronopostTrackingURL, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("chronopost: build request: %w", err)
+		return TrackResult{}, fmt.Errorf("chronopost: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "text/xml; charset=utf-8")
 	req.Header.Set("SOAPAction", chronopostSOAPAction)
 
 	resp, err := t.httpClient().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("chronopost: request failed: %w", err)
+		return TrackResult{}, fmt.Errorf("chronopost: request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("chronopost: read response: %w", err)
+		return TrackResult{}, fmt.Errorf("chronopost: read response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("chronopost: unexpected status %d", resp.StatusCode)
+		return TrackResult{}, fmt.Errorf("chronopost: unexpected status %d", resp.StatusCode)
 	}
 
 	return parseChronopostResponse(respBody)
@@ -100,9 +100,10 @@ type chronopostTrackResponse struct {
 }
 
 type chronopostReturn struct {
-	ErrorCode         int                    `xml:"errorCode"`
-	ErrorMessage      string                 `xml:"errorMessage"`
-	ListEventInfoComp chronopostEventInfoComp `xml:"listEventInfoComp"`
+	ErrorCode              int                     `xml:"errorCode"`
+	ErrorMessage           string                  `xml:"errorMessage"`
+	EstimatedDeliveryDate  string                  `xml:"estimatedDeliveryDate"`
+	ListEventInfoComp      chronopostEventInfoComp `xml:"listEventInfoComp"`
 }
 
 type chronopostEventInfoComp struct {
@@ -118,22 +119,30 @@ type chronopostEvent struct {
 	ZipCode     string `xml:"zipCode"`
 }
 
-func parseChronopostResponse(data []byte) ([]model.TrackingEvent, error) {
+func parseChronopostResponse(data []byte) (TrackResult, error) {
 	var env chronopostEnvelope
 	if err := xml.Unmarshal(data, &env); err != nil {
-		return nil, fmt.Errorf("chronopost: parse xml: %w", err)
+		return TrackResult{}, fmt.Errorf("chronopost: parse xml: %w", err)
 	}
 
 	if env.Body.Fault != nil {
-		return nil, fmt.Errorf("chronopost: SOAP fault: %s", env.Body.Fault.FaultString)
+		return TrackResult{}, fmt.Errorf("chronopost: SOAP fault: %s", env.Body.Fault.FaultString)
 	}
 
 	ret := env.Body.Response.Return
 	if ret.ErrorCode != 0 {
-		return nil, fmt.Errorf("chronopost: error %d: %s", ret.ErrorCode, ret.ErrorMessage)
+		return TrackResult{}, fmt.Errorf("chronopost: error %d: %s", ret.ErrorCode, ret.ErrorMessage)
 	}
 
-	var events []model.TrackingEvent
+	var result TrackResult
+
+	if ret.EstimatedDeliveryDate != "" {
+		if t, err := parseChronopostDate(ret.EstimatedDeliveryDate); err == nil {
+			utc := t.UTC()
+			result.EstimatedDelivery = &utc
+		}
+	}
+
 	for _, e := range ret.ListEventInfoComp.Events {
 		ts, err := parseChronopostDate(e.Date)
 		if err != nil {
@@ -142,7 +151,7 @@ func parseChronopostResponse(data []byte) ([]model.TrackingEvent, error) {
 
 		location := buildLocation(e.OfficeLabel, e.ZipCode)
 
-		events = append(events, model.TrackingEvent{
+		result.Events = append(result.Events, model.TrackingEvent{
 			Status:    mapChronopostStatus(e.Code),
 			Message:   e.Label,
 			Location:  location,
@@ -150,7 +159,7 @@ func parseChronopostResponse(data []byte) ([]model.TrackingEvent, error) {
 		})
 	}
 
-	return events, nil
+	return result, nil
 }
 
 func parseChronopostDate(s string) (time.Time, error) {

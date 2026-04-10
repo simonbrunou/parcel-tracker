@@ -120,7 +120,7 @@ func (h *Handler) CreateParcel(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
-			events, err := t.Track(ctx, trackingNumber)
+			result, err := t.Track(ctx, trackingNumber)
 			if err != nil {
 				h.Logger.Warn("auto-refresh: tracking failed",
 					"parcel_id", parcelID,
@@ -129,7 +129,7 @@ func (h *Handler) CreateParcel(w http.ResponseWriter, r *http.Request) {
 				)
 				return
 			}
-			for _, e := range events {
+			for _, e := range result.Events {
 				e.ParcelID = parcelID
 				if _, err := h.Store.CreateEvent(ctx, e); err != nil {
 					h.Logger.Error("auto-refresh: failed to create event",
@@ -141,6 +141,7 @@ func (h *Handler) CreateParcel(w http.ResponseWriter, r *http.Request) {
 			if p, err := h.Store.GetParcel(ctx, parcelID); err == nil {
 				now := time.Now().UTC()
 				p.LastCheck = &now
+				p.EstimatedDelivery = result.EstimatedDelivery
 				if _, err := h.Store.UpdateParcel(ctx, p); err != nil {
 					h.Logger.Error("auto-refresh: failed to update parcel",
 						"parcel_id", parcelID,
@@ -231,7 +232,7 @@ func (h *Handler) RefreshParcel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	events, err := t.Track(r.Context(), parcel.TrackingNumber)
+	result, err := t.Track(r.Context(), parcel.TrackingNumber)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "tracking failed: "+err.Error())
 		return
@@ -244,7 +245,7 @@ func (h *Handler) RefreshParcel(w http.ResponseWriter, r *http.Request) {
 		seen[tracker.EventKey(e)] = true
 	}
 
-	for _, e := range events {
+	for _, e := range result.Events {
 		if seen[tracker.EventKey(e)] {
 			continue
 		}
@@ -258,6 +259,7 @@ func (h *Handler) RefreshParcel(w http.ResponseWriter, r *http.Request) {
 	parcel, _ = h.Store.GetParcel(r.Context(), id)
 	now := time.Now().UTC()
 	parcel.LastCheck = &now
+	parcel.EstimatedDelivery = result.EstimatedDelivery
 	h.Store.UpdateParcel(r.Context(), parcel)
 
 	writeJSON(w, http.StatusOK, parcel)

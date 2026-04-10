@@ -3,15 +3,23 @@ package tracker
 import (
 	"context"
 	"os"
+	"time"
 
 	"github.com/simonbrunou/parcel-tracker/internal/model"
 )
+
+// TrackResult holds the outcome of a carrier tracking call.
+// It includes the tracking events and an optional estimated delivery date.
+type TrackResult struct {
+	Events            []model.TrackingEvent
+	EstimatedDelivery *time.Time
+}
 
 // Tracker defines how a carrier tracking provider works.
 type Tracker interface {
 	Code() model.CarrierCode
 	Name() string
-	Track(ctx context.Context, trackingNumber string) ([]model.TrackingEvent, error)
+	Track(ctx context.Context, trackingNumber string) (TrackResult, error)
 }
 
 // CarrierInfo is returned to the frontend for the carrier dropdown.
