@@ -39,11 +39,7 @@ func (w *Worker) Run(ctx context.Context) {
 }
 
 func (w *Worker) refreshAll(ctx context.Context) {
-	// Fetch all non-archived parcels that aren't in a terminal state.
-	notArchived := false
-	parcels, err := w.Store.ListParcels(ctx, store.ParcelFilter{
-		Archived: &notArchived,
-	})
+	parcels, err := w.Store.ListActiveParcels(ctx)
 	if err != nil {
 		w.Logger.Error("worker: failed to list parcels", "error", err)
 		return
@@ -53,15 +49,6 @@ func (w *Worker) refreshAll(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-
-		// Skip terminal statuses and manual carrier.
-		if p.Status == model.StatusDelivered || p.Status == model.StatusExpired {
-			continue
-		}
-		if p.Carrier == model.CarrierManual {
-			continue
-		}
-
 		w.refreshParcel(ctx, p)
 	}
 }

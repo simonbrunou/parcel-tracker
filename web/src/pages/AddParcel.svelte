@@ -3,6 +3,7 @@
   import { createParcel, getHealth, type CarrierInfo } from "../lib/api";
   import Navbar from "../components/Navbar.svelte";
   import { t } from "../lib/i18n.svelte";
+  import { addToast } from "../lib/toast.svelte";
 
   let trackingNumber = $state("");
   let carrier = $state("manual");
@@ -30,6 +31,7 @@
         name: name,
         notes: notes,
       });
+      addToast(t("toast.parcelCreated"));
       push(`/parcels/${parcel.id}`);
     } catch (err: any) {
       error = err.message || t("addParcel.failed");

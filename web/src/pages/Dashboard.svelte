@@ -7,6 +7,7 @@
 
   let parcels = $state<Parcel[]>([]);
   let loading = $state(true);
+  let error = $state("");
   let search = $state("");
   let statusFilter = $state("");
   let showArchived = $state(false);
@@ -29,10 +30,13 @@
 
   async function loadParcels() {
     loading = true;
+    error = "";
     try {
-      parcels = await listParcels();
-    } catch {
-      // handled by api redirect
+      parcels = (await listParcels()).data;
+    } catch (err: any) {
+      if (err?.status !== 401) {
+        error = err?.message || t("dashboard.loadFailed");
+      }
     } finally {
       loading = false;
     }
@@ -106,8 +110,19 @@
     </button>
   </div>
 
+  <!-- Error State -->
+  {#if error}
+    <div class="text-center py-16">
+      <p class="text-[var(--color-danger)] text-lg mb-4">{error}</p>
+      <button
+        onclick={() => loadParcels()}
+        class="px-4 py-2 bg-[var(--color-accent)] text-white rounded-lg hover:bg-[var(--color-accent-hover)] transition-colors cursor-pointer"
+      >
+        {t("common.retry")}
+      </button>
+    </div>
   <!-- Parcel List -->
-  {#if loading}
+  {:else if loading}
     <div class="space-y-3">
       {#each [1, 2, 3] as _}
         <div class="bg-[var(--color-surface-alt)] rounded-xl p-4 animate-pulse">

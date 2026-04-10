@@ -63,8 +63,8 @@ func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(req.Password) < 4 {
-		writeError(w, http.StatusBadRequest, "password must be at least 4 characters")
+	if len(req.Password) < 8 {
+		writeError(w, http.StatusBadRequest, "password must be at least 8 characters")
 		return
 	}
 

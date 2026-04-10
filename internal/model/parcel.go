@@ -34,6 +34,27 @@ const (
 	CarrierRelaisColis  CarrierCode = "relaiscolis"
 )
 
+// IsValid reports whether the carrier code is a known carrier.
+func (c CarrierCode) IsValid() bool {
+	switch c {
+	case CarrierManual, CarrierMock, CarrierUSPS, CarrierFedEx, CarrierUPS, CarrierDHL,
+		CarrierPostNL, CarrierColissimo, CarrierChronopost, CarrierLaPoste,
+		CarrierMondialRelay, CarrierGLS, CarrierDPD, CarrierColisPrive, CarrierRelaisColis:
+		return true
+	}
+	return false
+}
+
+// IsValid reports whether the parcel status is a known status.
+func (s ParcelStatus) IsValid() bool {
+	switch s {
+	case StatusUnknown, StatusInfoReceived, StatusInTransit, StatusOutForDelivery,
+		StatusDelivered, StatusFailed, StatusExpired:
+		return true
+	}
+	return false
+}
+
 type Parcel struct {
 	ID             string       `json:"id"`
 	TrackingNumber string       `json:"tracking_number"`

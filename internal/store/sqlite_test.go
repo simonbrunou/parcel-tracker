@@ -133,12 +133,15 @@ func TestListParcelsFilterByStatus(t *testing.T) {
 	s.CreateParcel(ctx, model.Parcel{TrackingNumber: "B", Carrier: model.CarrierManual, Status: model.StatusDelivered})
 	s.CreateParcel(ctx, model.Parcel{TrackingNumber: "C", Carrier: model.CarrierManual, Status: model.StatusInTransit})
 
-	parcels, err := s.ListParcels(ctx, ParcelFilter{Status: model.StatusInTransit})
+	result, err := s.ListParcels(ctx, ParcelFilter{Status: model.StatusInTransit})
 	if err != nil {
 		t.Fatalf("ListParcels: %v", err)
 	}
-	if len(parcels) != 2 {
-		t.Errorf("expected 2 in-transit parcels, got %d", len(parcels))
+	if len(result.Data) != 2 {
+		t.Errorf("expected 2 in-transit parcels, got %d", len(result.Data))
+	}
+	if result.Total != 2 {
+		t.Errorf("expected total 2, got %d", result.Total)
 	}
 }
 
@@ -152,24 +155,24 @@ func TestListParcelsFilterByArchived(t *testing.T) {
 	s.CreateParcel(ctx, model.Parcel{TrackingNumber: "B", Carrier: model.CarrierManual})
 
 	notArchived := false
-	parcels, err := s.ListParcels(ctx, ParcelFilter{Archived: &notArchived})
+	result, err := s.ListParcels(ctx, ParcelFilter{Archived: &notArchived})
 	if err != nil {
 		t.Fatalf("ListParcels: %v", err)
 	}
-	if len(parcels) != 1 {
-		t.Errorf("expected 1 non-archived parcel, got %d", len(parcels))
+	if len(result.Data) != 1 {
+		t.Errorf("expected 1 non-archived parcel, got %d", len(result.Data))
 	}
-	if parcels[0].TrackingNumber != "B" {
-		t.Errorf("expected tracking number B, got %s", parcels[0].TrackingNumber)
+	if result.Data[0].TrackingNumber != "B" {
+		t.Errorf("expected tracking number B, got %s", result.Data[0].TrackingNumber)
 	}
 
 	archived := true
-	parcels, err = s.ListParcels(ctx, ParcelFilter{Archived: &archived})
+	result, err = s.ListParcels(ctx, ParcelFilter{Archived: &archived})
 	if err != nil {
 		t.Fatalf("ListParcels: %v", err)
 	}
-	if len(parcels) != 1 {
-		t.Errorf("expected 1 archived parcel, got %d", len(parcels))
+	if len(result.Data) != 1 {
+		t.Errorf("expected 1 archived parcel, got %d", len(result.Data))
 	}
 }
 
@@ -181,21 +184,21 @@ func TestListParcelsFilterBySearch(t *testing.T) {
 	s.CreateParcel(ctx, model.Parcel{TrackingNumber: "OTHER456", Carrier: model.CarrierManual, Name: "My Laptop"})
 
 	// Search by tracking number
-	parcels, _ := s.ListParcels(ctx, ParcelFilter{Search: "TRACK"})
-	if len(parcels) != 1 {
-		t.Errorf("expected 1 result searching by tracking number, got %d", len(parcels))
+	result, _ := s.ListParcels(ctx, ParcelFilter{Search: "TRACK"})
+	if len(result.Data) != 1 {
+		t.Errorf("expected 1 result searching by tracking number, got %d", len(result.Data))
 	}
 
 	// Search by name
-	parcels, _ = s.ListParcels(ctx, ParcelFilter{Search: "Laptop"})
-	if len(parcels) != 1 {
-		t.Errorf("expected 1 result searching by name, got %d", len(parcels))
+	result, _ = s.ListParcels(ctx, ParcelFilter{Search: "Laptop"})
+	if len(result.Data) != 1 {
+		t.Errorf("expected 1 result searching by name, got %d", len(result.Data))
 	}
 
 	// Search matching both
-	parcels, _ = s.ListParcels(ctx, ParcelFilter{Search: "My"})
-	if len(parcels) != 2 {
-		t.Errorf("expected 2 results for broad search, got %d", len(parcels))
+	result, _ = s.ListParcels(ctx, ParcelFilter{Search: "My"})
+	if len(result.Data) != 2 {
+		t.Errorf("expected 2 results for broad search, got %d", len(result.Data))
 	}
 }
 
@@ -203,15 +206,18 @@ func TestListParcelsEmpty(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	parcels, err := s.ListParcels(ctx, ParcelFilter{})
+	result, err := s.ListParcels(ctx, ParcelFilter{})
 	if err != nil {
 		t.Fatalf("ListParcels: %v", err)
 	}
-	if parcels == nil {
+	if result.Data == nil {
 		t.Fatal("expected non-nil empty slice")
 	}
-	if len(parcels) != 0 {
-		t.Errorf("expected 0 parcels, got %d", len(parcels))
+	if len(result.Data) != 0 {
+		t.Errorf("expected 0 parcels, got %d", len(result.Data))
+	}
+	if result.Total != 0 {
+		t.Errorf("expected total 0, got %d", result.Total)
 	}
 }
 
@@ -223,22 +229,22 @@ func TestListParcelsOrder(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 	s.CreateParcel(ctx, model.Parcel{TrackingNumber: "SECOND", Carrier: model.CarrierManual})
 
-	parcels, _ := s.ListParcels(ctx, ParcelFilter{})
-	if len(parcels) != 2 {
-		t.Fatalf("expected 2 parcels, got %d", len(parcels))
+	result, _ := s.ListParcels(ctx, ParcelFilter{})
+	if len(result.Data) != 2 {
+		t.Fatalf("expected 2 parcels, got %d", len(result.Data))
 	}
 	// Most recently updated first
-	if parcels[0].TrackingNumber != "SECOND" {
-		t.Errorf("expected SECOND first (newest), got %s", parcels[0].TrackingNumber)
+	if result.Data[0].TrackingNumber != "SECOND" {
+		t.Errorf("expected SECOND first (newest), got %s", result.Data[0].TrackingNumber)
 	}
 
 	// Update the first parcel to make it newest
 	p1.Name = "updated"
 	s.UpdateParcel(ctx, p1)
 
-	parcels, _ = s.ListParcels(ctx, ParcelFilter{})
-	if parcels[0].TrackingNumber != "FIRST" {
-		t.Errorf("expected FIRST first after update, got %s", parcels[0].TrackingNumber)
+	result, _ = s.ListParcels(ctx, ParcelFilter{})
+	if result.Data[0].TrackingNumber != "FIRST" {
+		t.Errorf("expected FIRST first after update, got %s", result.Data[0].TrackingNumber)
 	}
 }
 
@@ -440,5 +446,93 @@ func TestParcelArchivedBoolConversion(t *testing.T) {
 	got, _ := s.GetParcel(ctx, p.ID)
 	if !got.Archived {
 		t.Error("expected Archived=true after update")
+	}
+}
+
+func TestListParcelsPagination(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	for i := 0; i < 5; i++ {
+		s.CreateParcel(ctx, model.Parcel{
+			TrackingNumber: "TRACK" + string(rune('A'+i)),
+			Carrier:        model.CarrierManual,
+		})
+		time.Sleep(5 * time.Millisecond) // ensure ordering
+	}
+
+	// Page 1, size 2
+	result, err := s.ListParcels(ctx, ParcelFilter{Page: 1, PageSize: 2})
+	if err != nil {
+		t.Fatalf("ListParcels page 1: %v", err)
+	}
+	if result.Total != 5 {
+		t.Errorf("expected total 5, got %d", result.Total)
+	}
+	if len(result.Data) != 2 {
+		t.Errorf("expected 2 parcels on page 1, got %d", len(result.Data))
+	}
+	if result.Page != 1 {
+		t.Errorf("expected page 1, got %d", result.Page)
+	}
+	if result.PageSize != 2 {
+		t.Errorf("expected page_size 2, got %d", result.PageSize)
+	}
+
+	// Page 3, size 2 (should have 1 result)
+	result, err = s.ListParcels(ctx, ParcelFilter{Page: 3, PageSize: 2})
+	if err != nil {
+		t.Fatalf("ListParcels page 3: %v", err)
+	}
+	if len(result.Data) != 1 {
+		t.Errorf("expected 1 parcel on page 3, got %d", len(result.Data))
+	}
+}
+
+func TestListActiveParcels(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	// Active, non-manual
+	s.CreateParcel(ctx, model.Parcel{TrackingNumber: "A", Carrier: model.CarrierLaPoste, Status: model.StatusInTransit})
+	// Delivered (terminal)
+	s.CreateParcel(ctx, model.Parcel{TrackingNumber: "B", Carrier: model.CarrierLaPoste, Status: model.StatusDelivered})
+	// Manual carrier
+	s.CreateParcel(ctx, model.Parcel{TrackingNumber: "C", Carrier: model.CarrierManual, Status: model.StatusInTransit})
+	// Active, non-manual
+	s.CreateParcel(ctx, model.Parcel{TrackingNumber: "D", Carrier: model.CarrierChronopost, Status: model.StatusUnknown})
+	// Archived
+	p5, _ := s.CreateParcel(ctx, model.Parcel{TrackingNumber: "E", Carrier: model.CarrierLaPoste, Status: model.StatusInTransit})
+	p5.Archived = true
+	s.UpdateParcel(ctx, p5)
+
+	parcels, err := s.ListActiveParcels(ctx)
+	if err != nil {
+		t.Fatalf("ListActiveParcels: %v", err)
+	}
+	if len(parcels) != 2 {
+		t.Errorf("expected 2 active parcels, got %d", len(parcels))
+	}
+}
+
+func TestUniqueTrackingCarrierConstraint(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	_, err := s.CreateParcel(ctx, model.Parcel{TrackingNumber: "DUP123", Carrier: model.CarrierLaPoste})
+	if err != nil {
+		t.Fatalf("first CreateParcel: %v", err)
+	}
+
+	// Same tracking + carrier should fail
+	_, err = s.CreateParcel(ctx, model.Parcel{TrackingNumber: "DUP123", Carrier: model.CarrierLaPoste})
+	if err == nil {
+		t.Fatal("expected error for duplicate tracking_number + carrier, got nil")
+	}
+
+	// Same tracking but different carrier should succeed
+	_, err = s.CreateParcel(ctx, model.Parcel{TrackingNumber: "DUP123", Carrier: model.CarrierChronopost})
+	if err != nil {
+		t.Fatalf("different carrier should succeed: %v", err)
 	}
 }

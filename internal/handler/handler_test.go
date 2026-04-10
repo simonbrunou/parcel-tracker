@@ -316,10 +316,13 @@ func TestListParcels(t *testing.T) {
 		t.Errorf("expected 200, got %d", w.Code)
 	}
 
-	var parcels []model.Parcel
-	json.NewDecoder(w.Body).Decode(&parcels)
-	if len(parcels) != 2 {
-		t.Errorf("expected 2 parcels, got %d", len(parcels))
+	var result store.PaginatedParcels
+	json.NewDecoder(w.Body).Decode(&result)
+	if len(result.Data) != 2 {
+		t.Errorf("expected 2 parcels, got %d", len(result.Data))
+	}
+	if result.Total != 2 {
+		t.Errorf("expected total 2, got %d", result.Total)
 	}
 }
 
@@ -333,10 +336,10 @@ func TestListParcelsWithStatusFilter(t *testing.T) {
 	r, w := env.authRequest("GET", "/api/parcels?status=in_transit", nil)
 	env.handler.ListParcels(w, r)
 
-	var parcels []model.Parcel
-	json.NewDecoder(w.Body).Decode(&parcels)
-	if len(parcels) != 1 {
-		t.Errorf("expected 1 in-transit parcel, got %d", len(parcels))
+	var result store.PaginatedParcels
+	json.NewDecoder(w.Body).Decode(&result)
+	if len(result.Data) != 1 {
+		t.Errorf("expected 1 in-transit parcel, got %d", len(result.Data))
 	}
 }
 
@@ -717,5 +720,62 @@ func TestWriteError(t *testing.T) {
 	json.NewDecoder(w.Body).Decode(&resp)
 	if resp["error"] != "bad request" {
 		t.Errorf("expected 'bad request', got %q", resp["error"])
+	}
+}
+
+func TestCreateParcelDuplicate(t *testing.T) {
+	env := newTestEnv(t)
+
+	r1, w1 := env.authRequest("POST", "/api/parcels", map[string]string{
+		"tracking_number": "DUP123",
+		"carrier":         "laposte",
+	})
+	env.handler.CreateParcel(w1, r1)
+	if w1.Code != http.StatusCreated {
+		t.Fatalf("first create expected 201, got %d: %s", w1.Code, w1.Body.String())
+	}
+
+	r2, w2 := env.authRequest("POST", "/api/parcels", map[string]string{
+		"tracking_number": "DUP123",
+		"carrier":         "laposte",
+	})
+	env.handler.CreateParcel(w2, r2)
+	if w2.Code != http.StatusConflict {
+		t.Errorf("duplicate create expected 409, got %d: %s", w2.Code, w2.Body.String())
+	}
+}
+
+func TestCreateParcelInvalidCarrier(t *testing.T) {
+	env := newTestEnv(t)
+
+	r, w := env.authRequest("POST", "/api/parcels", map[string]string{
+		"tracking_number": "TRACK123",
+		"carrier":         "invalid_carrier",
+	})
+	env.handler.CreateParcel(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid carrier, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestUpdateParcelEmptyTrackingNumber(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+
+	p, _ := env.store.CreateParcel(ctx, model.Parcel{
+		TrackingNumber: "ABC",
+		Carrier:        model.CarrierManual,
+	})
+
+	r, w := env.authRequest("PUT", "/api/parcels/"+p.ID, map[string]any{
+		"tracking_number": "",
+		"carrier":         "manual",
+	})
+	r = withChiParam(r, "id", p.ID)
+	env.handler.UpdateParcel(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for empty tracking_number, got %d: %s", w.Code, w.Body.String())
 	}
 }

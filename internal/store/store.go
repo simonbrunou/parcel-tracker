@@ -10,11 +10,21 @@ type ParcelFilter struct {
 	Status   model.ParcelStatus
 	Archived *bool
 	Search   string
+	Page     int
+	PageSize int
+}
+
+type PaginatedParcels struct {
+	Data     []model.Parcel `json:"data"`
+	Total    int            `json:"total"`
+	Page     int            `json:"page"`
+	PageSize int            `json:"page_size"`
 }
 
 type Store interface {
 	// Parcels
-	ListParcels(ctx context.Context, filter ParcelFilter) ([]model.Parcel, error)
+	ListParcels(ctx context.Context, filter ParcelFilter) (PaginatedParcels, error)
+	ListActiveParcels(ctx context.Context) ([]model.Parcel, error)
 	GetParcel(ctx context.Context, id string) (model.Parcel, error)
 	CreateParcel(ctx context.Context, p model.Parcel) (model.Parcel, error)
 	UpdateParcel(ctx context.Context, p model.Parcel) (model.Parcel, error)

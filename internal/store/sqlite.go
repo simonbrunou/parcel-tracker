@@ -69,6 +69,9 @@ func (s *SQLiteStore) migrate() error {
 
 		CREATE INDEX IF NOT EXISTS idx_tracking_events_parcel_id ON tracking_events(parcel_id);
 		CREATE INDEX IF NOT EXISTS idx_parcels_status ON parcels(status);
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_parcels_tracking_carrier ON parcels(tracking_number, carrier) WHERE archived = 0;
+		CREATE INDEX IF NOT EXISTS idx_parcels_archived ON parcels(archived);
+		CREATE INDEX IF NOT EXISTS idx_parcels_updated_at ON parcels(updated_at);
 
 		CREATE TABLE IF NOT EXISTS settings (
 			key TEXT PRIMARY KEY,
@@ -88,16 +91,16 @@ func newID() string {
 
 // Parcels
 
-func (s *SQLiteStore) ListParcels(ctx context.Context, filter ParcelFilter) ([]model.Parcel, error) {
-	query := "SELECT id, tracking_number, carrier, name, notes, status, archived, last_check, created_at, updated_at FROM parcels WHERE 1=1"
+func (s *SQLiteStore) ListParcels(ctx context.Context, filter ParcelFilter) (PaginatedParcels, error) {
+	where := " WHERE 1=1"
 	var args []any
 
 	if filter.Status != "" {
-		query += " AND status = ?"
+		where += " AND status = ?"
 		args = append(args, filter.Status)
 	}
 	if filter.Archived != nil {
-		query += " AND archived = ?"
+		where += " AND archived = ?"
 		if *filter.Archived {
 			args = append(args, 1)
 		} else {
@@ -105,14 +108,70 @@ func (s *SQLiteStore) ListParcels(ctx context.Context, filter ParcelFilter) ([]m
 		}
 	}
 	if filter.Search != "" {
-		query += " AND (name LIKE ? OR tracking_number LIKE ?)"
-		s := "%" + filter.Search + "%"
-		args = append(args, s, s)
+		where += " AND (name LIKE ? OR tracking_number LIKE ?)"
+		searchPat := "%" + filter.Search + "%"
+		args = append(args, searchPat, searchPat)
 	}
 
-	query += " ORDER BY updated_at DESC"
+	// Count total matching rows.
+	var total int
+	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM parcels"+where, args...).Scan(&total); err != nil {
+		return PaginatedParcels{}, err
+	}
 
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	// Apply pagination defaults.
+	page := filter.Page
+	if page < 1 {
+		page = 1
+	}
+	pageSize := filter.PageSize
+	if pageSize < 1 {
+		pageSize = 50
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+	offset := (page - 1) * pageSize
+
+	query := "SELECT id, tracking_number, carrier, name, notes, status, archived, last_check, created_at, updated_at FROM parcels" + where + " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
+	paginatedArgs := append(args, pageSize, offset)
+
+	rows, err := s.db.QueryContext(ctx, query, paginatedArgs...)
+	if err != nil {
+		return PaginatedParcels{}, err
+	}
+	defer rows.Close()
+
+	var parcels []model.Parcel
+	for rows.Next() {
+		p, err := scanParcel(rows)
+		if err != nil {
+			return PaginatedParcels{}, err
+		}
+		parcels = append(parcels, p)
+	}
+	if parcels == nil {
+		parcels = []model.Parcel{}
+	}
+	if err := rows.Err(); err != nil {
+		return PaginatedParcels{}, err
+	}
+
+	return PaginatedParcels{
+		Data:     parcels,
+		Total:    total,
+		Page:     page,
+		PageSize: pageSize,
+	}, nil
+}
+
+func (s *SQLiteStore) ListActiveParcels(ctx context.Context) ([]model.Parcel, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, tracking_number, carrier, name, notes, status, archived, last_check, created_at, updated_at
+		 FROM parcels
+		 WHERE archived = 0 AND status NOT IN (?, ?) AND carrier != ?
+		 ORDER BY updated_at DESC`,
+		model.StatusDelivered, model.StatusExpired, model.CarrierManual)
 	if err != nil {
 		return nil, err
 	}

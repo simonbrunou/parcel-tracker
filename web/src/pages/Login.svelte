@@ -33,7 +33,7 @@
           loading = false;
           return;
         }
-        if (password.length < 4) {
+        if (password.length < 8) {
           error = t("login.passwordTooShort");
           loading = false;
           return;
