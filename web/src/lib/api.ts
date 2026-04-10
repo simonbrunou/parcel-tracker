@@ -58,6 +58,14 @@ export const setup = (password: string) =>
     body: JSON.stringify({ password }),
   });
 
+// Pagination
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 // Parcels
 export interface Parcel {
   id: string;
@@ -91,7 +99,7 @@ export const listParcels = (params?: Record<string, string>) => {
   const query = params
     ? "?" + new URLSearchParams(params).toString()
     : "";
-  return request<Parcel[]>(`/parcels${query}`);
+  return request<PaginatedResponse<Parcel>>(`/parcels${query}`);
 };
 
 export const getParcel = (id: string) => request<Parcel>(`/parcels/${id}`);

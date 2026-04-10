@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -17,12 +18,20 @@ func New(h *handler.Handler, a *auth.Auth, distFS fs.FS, logger *slog.Logger) ht
 
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(SecurityHeaders)
 	r.Use(middleware.Compress(5))
 	r.Use(middleware.Heartbeat("/ping"))
 
+	rl := NewRateLimiter(10, time.Minute)
+
 	r.Route("/api", func(r chi.Router) {
-		r.Post("/auth/setup", h.Setup)
-		r.Post("/auth/login", h.Login)
+		// Rate-limited auth endpoints
+		r.Group(func(r chi.Router) {
+			r.Use(rl.Middleware)
+			r.Post("/auth/setup", h.Setup)
+			r.Post("/auth/login", h.Login)
+		})
+
 		r.Post("/auth/logout", h.Logout)
 		r.Get("/auth/check", h.CheckAuth)
 

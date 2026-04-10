@@ -12,6 +12,7 @@
   } from "../lib/api";
   import { CARRIER_LABELS, STATUS_COLORS, formatRelativeTime } from "../lib/utils";
   import { t, getStatusLabel } from "../lib/i18n.svelte";
+  import { addToast } from "../lib/toast.svelte";
   import StatusBadge from "../components/StatusBadge.svelte";
   import ParcelTimeline from "../components/ParcelTimeline.svelte";
   import Navbar from "../components/Navbar.svelte";
@@ -24,6 +25,7 @@
   let error = $state("");
   let refreshing = $state(false);
   let showDelete = $state(false);
+  let showArchiveConfirm = $state(false);
   let showAddEvent = $state(false);
   let editing = $state(false);
 
@@ -68,31 +70,54 @@
     try {
       parcel = await refreshParcel(params.id);
       events = await listEvents(params.id);
-    } catch {}
-    refreshing = false;
+      addToast(t("toast.trackingRefreshed"));
+    } catch (err: any) {
+      addToast(err?.message || t("toast.error"), "error");
+    } finally {
+      refreshing = false;
+    }
   }
 
   async function handleDelete() {
-    await deleteParcel(params.id);
-    push("/");
+    try {
+      await deleteParcel(params.id);
+      addToast(t("toast.parcelDeleted"));
+      push("/");
+    } catch (err: any) {
+      addToast(err?.message || t("toast.error"), "error");
+      showDelete = false;
+    }
   }
 
   async function handleArchive() {
     if (!parcel) return;
-    parcel = await updateParcel(params.id, { ...parcel, archived: !parcel.archived });
+    const wasArchived = parcel.archived;
+    try {
+      parcel = await updateParcel(params.id, { ...parcel, archived: !parcel.archived });
+      addToast(t(wasArchived ? "toast.parcelUnarchived" : "toast.parcelArchived"));
+    } catch (err: any) {
+      addToast(err?.message || t("toast.error"), "error");
+    } finally {
+      showArchiveConfirm = false;
+    }
   }
 
   async function handleAddEvent(e: Event) {
     e.preventDefault();
-    await createEvent(params.id, {
-      status: eventStatus,
-      message: eventMessage,
-      location: eventLocation,
-    });
-    eventMessage = "";
-    eventLocation = "";
-    showAddEvent = false;
-    await load();
+    try {
+      await createEvent(params.id, {
+        status: eventStatus,
+        message: eventMessage,
+        location: eventLocation,
+      });
+      addToast(t("toast.eventAdded"));
+      eventMessage = "";
+      eventLocation = "";
+      showAddEvent = false;
+      await load();
+    } catch (err: any) {
+      addToast(err?.message || t("toast.error"), "error");
+    }
   }
 
   function startEdit() {
@@ -107,14 +132,25 @@
   async function handleEdit(e: Event) {
     e.preventDefault();
     if (!parcel) return;
-    parcel = await updateParcel(params.id, {
-      ...parcel,
-      name: editName,
-      notes: editNotes,
-      tracking_number: editTrackingNumber,
-      carrier: editCarrier,
-    });
-    editing = false;
+    try {
+      parcel = await updateParcel(params.id, {
+        ...parcel,
+        name: editName,
+        notes: editNotes,
+        tracking_number: editTrackingNumber,
+        carrier: editCarrier,
+      });
+      addToast(t("toast.parcelUpdated"));
+      editing = false;
+    } catch (err: any) {
+      addToast(err?.message || t("toast.error"), "error");
+    }
+  }
+
+  function handleDialogKeydown(e: KeyboardEvent, closeDialog: () => void) {
+    if (e.key === "Escape") {
+      closeDialog();
+    }
   }
 </script>
 
@@ -179,7 +215,7 @@
           </svg>
         </button>
         <button
-          onclick={handleArchive}
+          onclick={() => { showArchiveConfirm = true; }}
           class="p-2 rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] transition-colors text-[var(--color-text-secondary)] cursor-pointer"
           title={parcel.archived ? t("detail.unarchive") : t("detail.archive")}
         >
@@ -313,9 +349,16 @@
 
     <!-- Delete confirmation -->
     {#if showDelete}
-      <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+      <div
+        class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-dialog-title"
+        onkeydown={(e) => handleDialogKeydown(e, () => { showDelete = false; })}
+      >
         <div class="bg-[var(--color-surface)] rounded-xl p-6 max-w-sm w-full shadow-xl">
-          <h3 class="text-lg font-semibold text-[var(--color-text-primary)] mb-2">{t("detail.deleteTitle")}</h3>
+          <h3 id="delete-dialog-title" class="text-lg font-semibold text-[var(--color-text-primary)] mb-2">{t("detail.deleteTitle")}</h3>
           <p class="text-[var(--color-text-secondary)] text-sm mb-5">
             {t("detail.deleteMessage")}
           </p>
@@ -331,6 +374,41 @@
               class="flex-1 py-2 bg-[var(--color-danger)] hover:bg-[var(--color-danger-hover)] text-white rounded-lg transition-colors cursor-pointer"
             >
               {t("common.delete")}
+            </button>
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    <!-- Archive confirmation -->
+    {#if showArchiveConfirm}
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+      <div
+        class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="archive-dialog-title"
+        onkeydown={(e) => handleDialogKeydown(e, () => { showArchiveConfirm = false; })}
+      >
+        <div class="bg-[var(--color-surface)] rounded-xl p-6 max-w-sm w-full shadow-xl">
+          <h3 id="archive-dialog-title" class="text-lg font-semibold text-[var(--color-text-primary)] mb-2">
+            {parcel.archived ? t("detail.unarchiveTitle") : t("detail.archiveTitle")}
+          </h3>
+          <p class="text-[var(--color-text-secondary)] text-sm mb-5">
+            {parcel.archived ? t("detail.unarchiveMessage") : t("detail.archiveMessage")}
+          </p>
+          <div class="flex gap-3">
+            <button
+              onclick={() => { showArchiveConfirm = false; }}
+              class="flex-1 py-2 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer"
+            >
+              {t("common.cancel")}
+            </button>
+            <button
+              onclick={handleArchive}
+              class="flex-1 py-2 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-lg transition-colors cursor-pointer"
+            >
+              {parcel.archived ? t("detail.unarchive") : t("detail.archive")}
             </button>
           </div>
         </div>

@@ -29,7 +29,7 @@ const en: Translations = {
   "login.signInButton": "Sign In",
   "login.getStarted": "Get Started",
   "login.passwordsMismatch": "Passwords do not match",
-  "login.passwordTooShort": "Password must be at least 4 characters",
+  "login.passwordTooShort": "Password must be at least 8 characters",
   "login.failed": "Login failed",
 
   // Dashboard
@@ -94,6 +94,31 @@ const en: Translations = {
   "status.failed": "Failed",
   "status.expired": "Expired",
 
+  // Dashboard errors
+  "dashboard.loadFailed": "Failed to load parcels",
+
+  // Not Found
+  "notFound.title": "Page not found",
+  "notFound.message": "The page you're looking for doesn't exist.",
+  "notFound.goHome": "Go to Dashboard",
+
+  // Archive confirmation
+  "detail.archiveTitle": "Archive parcel?",
+  "detail.archiveMessage": "This parcel will be moved to the archive.",
+  "detail.unarchiveTitle": "Unarchive parcel?",
+  "detail.unarchiveMessage": "This parcel will be restored from the archive.",
+
+  // Toasts
+  "toast.parcelCreated": "Parcel added successfully",
+  "toast.parcelDeleted": "Parcel deleted",
+  "toast.parcelArchived": "Parcel archived",
+  "toast.parcelUnarchived": "Parcel unarchived",
+  "toast.parcelUpdated": "Parcel updated",
+  "toast.trackingRefreshed": "Tracking refreshed",
+  "toast.eventAdded": "Event added",
+  "toast.eventDeleted": "Event deleted",
+  "toast.error": "An error occurred",
+
   // Relative time
   "time.justNow": "just now",
   "time.minutesAgo": "{n}m ago",
@@ -130,7 +155,7 @@ const fr: Translations = {
   "login.signInButton": "Se connecter",
   "login.getStarted": "Commencer",
   "login.passwordsMismatch": "Les mots de passe ne correspondent pas",
-  "login.passwordTooShort": "Le mot de passe doit contenir au moins 4 caract\u00e8res",
+  "login.passwordTooShort": "Le mot de passe doit contenir au moins 8 caract\u00e8res",
   "login.failed": "\u00c9chec de connexion",
 
   // Dashboard
@@ -194,6 +219,31 @@ const fr: Translations = {
   "status.delivered": "Livr\u00e9",
   "status.failed": "\u00c9chou\u00e9",
   "status.expired": "Expir\u00e9",
+
+  // Dashboard errors
+  "dashboard.loadFailed": "\u00c9chec du chargement des colis",
+
+  // Not Found
+  "notFound.title": "Page introuvable",
+  "notFound.message": "La page que vous recherchez n'existe pas.",
+  "notFound.goHome": "Aller au tableau de bord",
+
+  // Archive confirmation
+  "detail.archiveTitle": "Archiver le colis ?",
+  "detail.archiveMessage": "Ce colis sera d\u00e9plac\u00e9 dans les archives.",
+  "detail.unarchiveTitle": "D\u00e9sarchiver le colis ?",
+  "detail.unarchiveMessage": "Ce colis sera restaur\u00e9 depuis les archives.",
+
+  // Toasts
+  "toast.parcelCreated": "Colis ajout\u00e9 avec succ\u00e8s",
+  "toast.parcelDeleted": "Colis supprim\u00e9",
+  "toast.parcelArchived": "Colis archiv\u00e9",
+  "toast.parcelUnarchived": "Colis d\u00e9sarchiv\u00e9",
+  "toast.parcelUpdated": "Colis mis \u00e0 jour",
+  "toast.trackingRefreshed": "Suivi actualis\u00e9",
+  "toast.eventAdded": "\u00c9v\u00e9nement ajout\u00e9",
+  "toast.eventDeleted": "\u00c9v\u00e9nement supprim\u00e9",
+  "toast.error": "Une erreur est survenue",
 
   // Relative time
   "time.justNow": "\u00e0 l'instant",

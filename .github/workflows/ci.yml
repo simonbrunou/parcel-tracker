@@ -18,5 +18,14 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Lint
+        run: go vet ./...
+
+      - name: Build
+        run: go build ./cmd/parcel-tracker
+
       - name: Run tests
-        run: go test ./internal/... -count=1 -timeout 120s
+        run: go test ./internal/... -count=1 -timeout 120s -coverprofile=coverage.out
+
+      - name: Coverage summary
+        run: go tool cover -func=coverage.out

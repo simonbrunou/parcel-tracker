@@ -23,10 +23,14 @@ import (
 var version = "dev"
 
 func main() {
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	slog.SetDefault(logger)
-
 	cfg := config.Load()
+
+	logLevel := slog.LevelInfo
+	if cfg.Dev {
+		logLevel = slog.LevelDebug
+	}
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel}))
+	slog.SetDefault(logger)
 
 	logger.Info("starting parcel-tracker", "version", version, "port", cfg.Port)
 

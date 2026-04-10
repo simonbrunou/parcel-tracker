@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -40,13 +42,24 @@ func (h *Handler) ListParcels(w http.ResponseWriter, r *http.Request) {
 		filter.Archived = &archived
 	}
 
-	parcels, err := h.Store.ListParcels(r.Context(), filter)
+	if p := r.URL.Query().Get("page"); p != "" {
+		if n, err := strconv.Atoi(p); err == nil {
+			filter.Page = n
+		}
+	}
+	if ps := r.URL.Query().Get("page_size"); ps != "" {
+		if n, err := strconv.Atoi(ps); err == nil {
+			filter.PageSize = n
+		}
+	}
+
+	result, err := h.Store.ListParcels(r.Context(), filter)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list parcels")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, parcels)
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (h *Handler) GetParcel(w http.ResponseWriter, r *http.Request) {
@@ -78,6 +91,10 @@ func (h *Handler) CreateParcel(w http.ResponseWriter, r *http.Request) {
 	if req.Carrier == "" {
 		req.Carrier = model.CarrierManual
 	}
+	if !req.Carrier.IsValid() {
+		writeError(w, http.StatusBadRequest, "invalid carrier")
+		return
+	}
 
 	parcel := model.Parcel{
 		TrackingNumber: req.TrackingNumber,
@@ -88,6 +105,10 @@ func (h *Handler) CreateParcel(w http.ResponseWriter, r *http.Request) {
 
 	created, err := h.Store.CreateParcel(r.Context(), parcel)
 	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			writeError(w, http.StatusConflict, "a parcel with this tracking number and carrier already exists")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "failed to create parcel")
 		return
 	}
@@ -101,16 +122,31 @@ func (h *Handler) CreateParcel(w http.ResponseWriter, r *http.Request) {
 			defer cancel()
 			events, err := t.Track(ctx, trackingNumber)
 			if err != nil {
+				h.Logger.Warn("auto-refresh: tracking failed",
+					"parcel_id", parcelID,
+					"carrier", created.Carrier,
+					"error", err,
+				)
 				return
 			}
 			for _, e := range events {
 				e.ParcelID = parcelID
-				h.Store.CreateEvent(ctx, e)
+				if _, err := h.Store.CreateEvent(ctx, e); err != nil {
+					h.Logger.Error("auto-refresh: failed to create event",
+						"parcel_id", parcelID,
+						"error", err,
+					)
+				}
 			}
 			if p, err := h.Store.GetParcel(ctx, parcelID); err == nil {
 				now := time.Now().UTC()
 				p.LastCheck = &now
-				h.Store.UpdateParcel(ctx, p)
+				if _, err := h.Store.UpdateParcel(ctx, p); err != nil {
+					h.Logger.Error("auto-refresh: failed to update parcel",
+						"parcel_id", parcelID,
+						"error", err,
+					)
+				}
 			}
 		}()
 	}
@@ -134,6 +170,15 @@ func (h *Handler) UpdateParcel(w http.ResponseWriter, r *http.Request) {
 	var req updateParcelRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.TrackingNumber == "" {
+		writeError(w, http.StatusBadRequest, "tracking_number is required")
+		return
+	}
+	if req.Carrier != "" && !req.Carrier.IsValid() {
+		writeError(w, http.StatusBadRequest, "invalid carrier")
 		return
 	}
 
