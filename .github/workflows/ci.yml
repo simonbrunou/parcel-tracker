@@ -18,6 +18,9 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Create frontend dist placeholder
+        run: mkdir -p web/dist && touch web/dist/.gitkeep
+
       - name: Lint
         run: go vet ./...
 
