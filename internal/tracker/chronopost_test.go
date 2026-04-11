@@ -34,14 +34,14 @@ const testChronopostResponse = `<?xml version="1.0" encoding="UTF-8"?>
             <zipCode>69000</zipCode>
           </events>
           <events>
-            <code>SD1</code>
+            <code>LT</code>
             <eventLabel>Colis en cours de livraison</eventLabel>
             <eventDate>2025-06-03T07:00:00+02:00</eventDate>
             <officeLabel>MARSEILLE</officeLabel>
             <zipCode>13001</zipCode>
           </events>
           <events>
-            <code>D1</code>
+            <code>LV</code>
             <eventLabel>Colis livre</eventLabel>
             <eventDate>2025-06-03T14:23:00+02:00</eventDate>
             <officeLabel>MARSEILLE</officeLabel>
@@ -179,18 +179,35 @@ func TestMapChronopostStatus(t *testing.T) {
 		code   string
 		status model.ParcelStatus
 	}{
+		// Delivered
+		{"LV", model.StatusDelivered},
+		{"RM", model.StatusDelivered},
 		{"D1", model.StatusDelivered},
 		{"D2", model.StatusDelivered},
-		{"SD1", model.StatusOutForDelivery},
+		// Out for delivery
+		{"LT", model.StatusOutForDelivery},
 		{"CR1", model.StatusOutForDelivery},
+		{"MD1", model.StatusOutForDelivery},
+		// Info received / preparation / pickup
+		{"DC", model.StatusInfoReceived},
 		{"EP1", model.StatusInfoReceived},
 		{"PH1", model.StatusInfoReceived},
 		{"RG", model.StatusInfoReceived},
+		// In transit
+		{"EC", model.StatusInTransit},
+		{"TS", model.StatusInTransit},
+		{"SD", model.StatusInTransit}, // sorted at depot, NOT out for delivery
+		{"IS", model.StatusInTransit},
 		{"TA1", model.StatusInTransit},
 		{"TI1", model.StatusInTransit},
+		// Padded with whitespace (Chronopost real-world format)
+		{"DC ", model.StatusInfoReceived},
+		{"SD ", model.StatusInTransit},
+		// Failed
 		{"LE1", model.StatusFailed},
 		{"RE1", model.StatusFailed},
 		{"AR1", model.StatusFailed},
+		// Unknown
 		{"XX", model.StatusInTransit},
 	}
 
@@ -239,6 +256,65 @@ func TestBuildLocation(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("buildLocation(%q, %q) = %q, want %q", tt.site, tt.zip, got, tt.want)
 		}
+	}
+}
+
+// testChronopostLiveResponse is an actual response captured from the live
+// Chronopost tracking-cxf API for tracking number XG953488284JB. It exercises
+// real-world quirks: codes padded with trailing spaces, whitespace-only zip
+// codes, the DC preparation code (which must not be classified as Delivered),
+// and the SD sorted-at-depot code (which must not be classified as
+// OutForDelivery).
+const testChronopostLiveResponse = `<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><ns2:trackSkybillV2Response xmlns:ns2="http://cxf.tracking.soap.chronopost.fr/"><return><errorCode>0</errorCode><listEventInfoComp><events><code>DC </code><eventDate>2026-04-10T07:55:27+02:00</eventDate><eventLabel>Colis en cours de pr&#233;paration chez l'exp&#233;diteur</eventLabel><highPriority>false</highPriority><NPC>   </NPC><officeLabel>Web Services</officeLabel><zipCode>     </zipCode></events><events><code>EC </code><eventDate>2026-04-10T14:28:01+02:00</eventDate><eventLabel>Tri effectu&#233; dans l'agence de d&#233;part</eventLabel><highPriority>true</highPriority><NPC> 62</NPC><officeLabel>ARRAS CHRONOPOST</officeLabel><zipCode>62223</zipCode></events><events><code>TS </code><eventDate>2026-04-10T14:29:01+02:00</eventDate><eventLabel>Colis en cours d'acheminement</eventLabel><highPriority>false</highPriority><NPC> 62</NPC><officeLabel>ARRAS CHRONOPOST</officeLabel><zipCode>62223</zipCode></events><events><code>TS </code><eventDate>2026-04-10T19:18:13+02:00</eventDate><eventLabel>Colis en cours d'acheminement</eventLabel><highPriority>false</highPriority><NPC>93 </NPC><officeLabel>AULNAY SOUS BOIS CHRONOPOST</officeLabel><zipCode>93600</zipCode></events><events><code>SD </code><eventDate>2026-04-11T05:26:24+02:00</eventDate><eventLabel>Tri effectu&#233; dans l'agence de distribution</eventLabel><highPriority>false</highPriority><NPC>56 </NPC><officeLabel>VANNES CHRONOPOST</officeLabel><zipCode>56000</zipCode></events><events><code>IS </code><eventDate>2026-04-11T05:27:24+02:00</eventDate><eventLabel>Livraison pr&#233;vue lundi prochain</eventLabel><highPriority>false</highPriority><NPC>56 </NPC><officeLabel>VANNES CHRONOPOST</officeLabel><zipCode>56000</zipCode></events><skybillNumber>XG953488284JB</skybillNumber></listEventInfoComp></return></ns2:trackSkybillV2Response></soap:Body></soap:Envelope>`
+
+// TestParseChronopostLiveResponse pins the parser against a real Chronopost
+// response so status regressions are caught. In particular it guards the
+// DC -> InfoReceived and SD -> InTransit mappings, which were previously
+// misclassified as Delivered and OutForDelivery respectively.
+func TestParseChronopostLiveResponse(t *testing.T) {
+	result, err := parseChronopostResponse([]byte(testChronopostLiveResponse))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Events) != 6 {
+		t.Fatalf("expected 6 events, got %d", len(result.Events))
+	}
+
+	// No estimatedDeliveryDate in this response.
+	if result.EstimatedDelivery != nil {
+		t.Errorf("expected no estimated delivery, got %v", result.EstimatedDelivery)
+	}
+
+	want := []struct {
+		status   model.ParcelStatus
+		location string
+	}{
+		{model.StatusInfoReceived, "Web Services"},            // DC
+		{model.StatusInTransit, "ARRAS CHRONOPOST (62223)"},    // EC
+		{model.StatusInTransit, "ARRAS CHRONOPOST (62223)"},    // TS
+		{model.StatusInTransit, "AULNAY SOUS BOIS CHRONOPOST (93600)"}, // TS
+		{model.StatusInTransit, "VANNES CHRONOPOST (56000)"},   // SD (NOT out for delivery)
+		{model.StatusInTransit, "VANNES CHRONOPOST (56000)"},   // IS
+	}
+
+	for i, w := range want {
+		e := result.Events[i]
+		if e.Status != w.status {
+			t.Errorf("event[%d]: expected status %q, got %q", i, w.status, e.Status)
+		}
+		if e.Location != w.location {
+			t.Errorf("event[%d]: expected location %q, got %q", i, w.location, e.Location)
+		}
+		if e.Timestamp.IsZero() {
+			t.Errorf("event[%d]: timestamp should be parsed", i)
+		}
+	}
+
+	// Guard against the previous bug where DC was classified as Delivered
+	// because HasPrefix("D") greedy-matched it.
+	if result.Events[0].Status == model.StatusDelivered {
+		t.Errorf("DC event must not be classified as Delivered")
 	}
 }
 
