@@ -196,41 +196,58 @@ func buildLocation(site, zipCode string) string {
 
 // mapChronopostStatus maps a Chronopost event code to an internal ParcelStatus.
 //
-// Chronopost event codes follow patterns:
+// Codes observed in the live tracking-cxf SOAP API (Chronopost returns them
+// padded with trailing spaces, hence the TrimSpace):
 //
-//	D*  = Delivered (D1, D2, D3, etc.)
-//	SD* = Out for delivery
-//	EP* = Picked up / handed over
-//	PH* = Package received by Chronopost
-//	RG* = Registered / info received
-//	TA* = Arrived at sorting hub (in transit)
-//	TI* = In transit between hubs
-//	RE* = Returned / refused
-//	LE* = Return to sender
-//	AR* = Issue / anomaly
+//	DC = Preparation at sender (label created) — info received
+//	EP = Picked up from sender                  — info received
+//	PH = Package received by Chronopost         — info received
+//	RG = Registered                              — info received
+//	EC = Sorted at origin hub                    — in transit
+//	TS = In transit between hubs                 — in transit
+//	TA = Arrived at sorting hub                  — in transit
+//	TI = In transit                              — in transit
+//	SD = Sorted at destination depot             — in transit
+//	IS = Informational (e.g. delivery scheduled) — in transit
+//	LT = Out for delivery (livreur en tournée)   — out for delivery
+//	CR = Courier en route                        — out for delivery
+//	MD = Mise en distribution                    — out for delivery
+//	LV = Delivered (livré)                       — delivered
+//	RM = Remis au destinataire                   — delivered
+//	D1,D2,D3... = Historical delivered variants  — delivered
+//	LE = Return to sender                        — failed
+//	RE = Refused / returned                      — failed
+//	AR = Anomaly / issue                         — failed
+//
+// Unknown codes fall back to StatusInTransit.
 func mapChronopostStatus(code string) model.ParcelStatus {
 	upper := strings.ToUpper(strings.TrimSpace(code))
 
 	switch {
-	// Delivered
-	case strings.HasPrefix(upper, "D"):
+	// Delivered. Match LV, RM, and legacy D + digit variants (D1, D2, ...).
+	// We deliberately do NOT match every "D*" because DC means "preparation
+	// at sender", not delivered.
+	case strings.HasPrefix(upper, "LV"),
+		strings.HasPrefix(upper, "RM"),
+		len(upper) >= 2 && upper[0] == 'D' && upper[1] >= '0' && upper[1] <= '9':
 		return model.StatusDelivered
-	// Out for delivery
-	case strings.HasPrefix(upper, "SD"),
+	// Out for delivery.
+	case strings.HasPrefix(upper, "LT"),
 		strings.HasPrefix(upper, "CR"),
 		strings.HasPrefix(upper, "MD"):
 		return model.StatusOutForDelivery
-	// Info received / picked up
-	case strings.HasPrefix(upper, "EP"),
+	// Info received / picked up / label created at sender.
+	case strings.HasPrefix(upper, "DC"),
+		strings.HasPrefix(upper, "EP"),
 		strings.HasPrefix(upper, "PH"),
 		strings.HasPrefix(upper, "RG"):
 		return model.StatusInfoReceived
-	// Failed / returned / refused
+	// Failed / returned / refused / anomaly.
 	case strings.HasPrefix(upper, "LE"),
 		strings.HasPrefix(upper, "RE"),
 		strings.HasPrefix(upper, "AR"):
 		return model.StatusFailed
-	// In transit (TA, TI, and any other code)
+	// In transit: EC, TS, TA, TI, SD, IS and any unknown code.
 	default:
 		return model.StatusInTransit
 	}
