@@ -52,6 +52,7 @@ export const CARRIER_LABELS: Record<string, string> = {
   colissimo: "Colissimo",
   chronopost: "Chronopost",
   laposte: "La Poste",
+  vintedgo: "Vinted Go",
 };
 
 export function toggleTheme(): void {

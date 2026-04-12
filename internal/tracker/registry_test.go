@@ -20,6 +20,7 @@ func TestNewRegistryRegistersAllCarriers(t *testing.T) {
 		model.CarrierDPD,
 		model.CarrierColisPrive,
 		model.CarrierRelaisColis,
+		model.CarrierVintedGo,
 	}
 
 	for _, code := range expectedCarriers {
@@ -42,8 +43,8 @@ func TestRegistryAvailable(t *testing.T) {
 	r := NewRegistry()
 
 	carriers := r.Available()
-	if len(carriers) < 10 {
-		t.Errorf("expected at least 10 carriers, got %d", len(carriers))
+	if len(carriers) < 11 {
+		t.Errorf("expected at least 11 carriers, got %d", len(carriers))
 	}
 
 	// Verify each carrier has code and name
