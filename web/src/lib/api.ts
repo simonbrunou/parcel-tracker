@@ -144,3 +144,23 @@ export const deleteEvent = (parcelId: string, eventId: string) =>
 // Health
 export const getHealth = () =>
   request<{ status: string; carriers: CarrierInfo[] }>("/health");
+
+// Notifications
+export const getVAPIDKey = () =>
+  request<{ key: string }>("/notifications/vapid-key");
+
+export const subscribePush = (subscription: {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}) =>
+  request<void>("/notifications/subscribe", {
+    method: "POST",
+    body: JSON.stringify(subscription),
+  });
+
+export const unsubscribePush = (endpoint: string) =>
+  request<void>("/notifications/subscribe", {
+    method: "DELETE",
+    body: JSON.stringify({ endpoint }),
+  });

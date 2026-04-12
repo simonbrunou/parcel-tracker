@@ -9,12 +9,18 @@ import (
 	"github.com/simonbrunou/parcel-tracker/internal/store"
 )
 
+// WorkerNotifier is called when new tracking events are found.
+type WorkerNotifier interface {
+	NotifyNewEvents(ctx context.Context, parcel model.Parcel, newEvents int)
+}
+
 // Worker periodically refreshes tracking data for active parcels.
 type Worker struct {
 	Store    store.Store
 	Registry *Registry
 	Interval time.Duration
 	Logger   *slog.Logger
+	Notifier WorkerNotifier
 }
 
 // Run starts the background refresh loop. It blocks until ctx is cancelled.
@@ -115,6 +121,9 @@ func (w *Worker) refreshParcel(ctx context.Context, p model.Parcel) {
 			"carrier", p.Carrier,
 			"new_events", newCount,
 		)
+		if w.Notifier != nil {
+			w.Notifier.NotifyNewEvents(ctx, updated, newCount)
+		}
 	}
 }
 

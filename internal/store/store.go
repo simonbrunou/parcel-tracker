@@ -2,9 +2,18 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/simonbrunou/parcel-tracker/internal/model"
 )
+
+type PushSubscription struct {
+	ID        string    `json:"id"`
+	Endpoint  string    `json:"endpoint"`
+	P256dh    string    `json:"p256dh"`
+	Auth      string    `json:"auth"`
+	CreatedAt time.Time `json:"created_at"`
+}
 
 type ParcelFilter struct {
 	Status   model.ParcelStatus
@@ -38,6 +47,11 @@ type Store interface {
 	// Settings
 	GetSetting(ctx context.Context, key string) (string, error)
 	SetSetting(ctx context.Context, key, value string) error
+
+	// Push Subscriptions
+	ListPushSubscriptions(ctx context.Context) ([]PushSubscription, error)
+	CreatePushSubscription(ctx context.Context, sub PushSubscription) (PushSubscription, error)
+	DeletePushSubscription(ctx context.Context, endpoint string) error
 
 	Close() error
 }

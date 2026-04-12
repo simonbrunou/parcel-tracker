@@ -77,6 +77,14 @@ func (s *SQLiteStore) migrate() error {
 			key TEXT PRIMARY KEY,
 			value TEXT NOT NULL DEFAULT ''
 		);
+
+		CREATE TABLE IF NOT EXISTS push_subscriptions (
+			id TEXT PRIMARY KEY,
+			endpoint TEXT NOT NULL UNIQUE,
+			p256dh TEXT NOT NULL,
+			auth TEXT NOT NULL,
+			created_at DATETIME NOT NULL DEFAULT (datetime('now'))
+		);
 	`)
 	if err != nil {
 		return err
@@ -361,6 +369,49 @@ func scanParcel(rows *sql.Rows) (model.Parcel, error) {
 
 func scanParcelRow(row *sql.Row) (model.Parcel, error) {
 	return scanParcelFields(row)
+}
+
+// Push Subscriptions
+
+func (s *SQLiteStore) ListPushSubscriptions(ctx context.Context) ([]PushSubscription, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT id, endpoint, p256dh, auth, created_at FROM push_subscriptions")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var subs []PushSubscription
+	for rows.Next() {
+		var sub PushSubscription
+		if err := rows.Scan(&sub.ID, &sub.Endpoint, &sub.P256dh, &sub.Auth, &sub.CreatedAt); err != nil {
+			return nil, err
+		}
+		subs = append(subs, sub)
+	}
+	if subs == nil {
+		subs = []PushSubscription{}
+	}
+	return subs, rows.Err()
+}
+
+func (s *SQLiteStore) CreatePushSubscription(ctx context.Context, sub PushSubscription) (PushSubscription, error) {
+	sub.ID = newID()
+	sub.CreatedAt = time.Now().UTC()
+
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO push_subscriptions (id, endpoint, p256dh, auth, created_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth, created_at = excluded.created_at`,
+		sub.ID, sub.Endpoint, sub.P256dh, sub.Auth, sub.CreatedAt)
+	if err != nil {
+		return PushSubscription{}, err
+	}
+	return sub, nil
+}
+
+func (s *SQLiteStore) DeletePushSubscription(ctx context.Context, endpoint string) error {
+	_, err := s.db.ExecContext(ctx, "DELETE FROM push_subscriptions WHERE endpoint = ?", endpoint)
+	return err
 }
 
 // Helper to filter out empty strings in query building

@@ -18,6 +18,9 @@ const en: Translations = {
   "nav.toggleTheme": "Toggle theme",
   "nav.logout": "Logout",
   "nav.language": "Language",
+  "nav.notifications": "Notifications",
+  "nav.notificationsOn": "Disable notifications",
+  "nav.notificationsOff": "Enable notifications",
 
   // Login
   "login.signIn": "Sign in to continue",
@@ -145,6 +148,9 @@ const fr: Translations = {
   "nav.toggleTheme": "Changer de th\u00e8me",
   "nav.logout": "D\u00e9connexion",
   "nav.language": "Langue",
+  "nav.notifications": "Notifications",
+  "nav.notificationsOn": "D\u00e9sactiver les notifications",
+  "nav.notificationsOff": "Activer les notifications",
 
   // Login
   "login.signIn": "Connectez-vous pour continuer",

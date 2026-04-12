@@ -14,6 +14,7 @@ import (
 	"github.com/simonbrunou/parcel-tracker/internal/auth"
 	"github.com/simonbrunou/parcel-tracker/internal/config"
 	"github.com/simonbrunou/parcel-tracker/internal/handler"
+	"github.com/simonbrunou/parcel-tracker/internal/notifier"
 	"github.com/simonbrunou/parcel-tracker/internal/server"
 	"github.com/simonbrunou/parcel-tracker/internal/store"
 	"github.com/simonbrunou/parcel-tracker/internal/tracker"
@@ -55,12 +56,23 @@ func main() {
 	// Tracker registry
 	registry := tracker.NewRegistry()
 
+	// Notifier
+	n := &notifier.Notifier{
+		Store:  db,
+		Logger: logger,
+	}
+	if err := n.EnsureVAPIDKeys(context.Background()); err != nil {
+		logger.Error("failed to initialize VAPID keys", "error", err)
+		os.Exit(1)
+	}
+
 	// Handlers
 	h := &handler.Handler{
-		Store:   db,
-		Auth:    a,
-		Tracker: registry,
-		Logger:  logger,
+		Store:    db,
+		Auth:     a,
+		Tracker:  registry,
+		Logger:   logger,
+		Notifier: n,
 	}
 
 	// Embedded frontend
@@ -89,6 +101,7 @@ func main() {
 			Registry: registry,
 			Interval: cfg.RefreshInterval,
 			Logger:   logger,
+			Notifier: n,
 		}
 		go w.Run(workerCtx)
 	}
