@@ -43,8 +43,10 @@ func NewRegistry() *Registry {
 	r.Register(&ManualTracker{})
 	r.Register(&MockTracker{})
 	r.Register(&ChronopostTracker{})
-	r.Register(&LaPosteTracker{APIKey: laPosteAPIKey})
-	r.Register(&ColissimoTracker{APIKey: laPosteAPIKey})
+	if laPosteAPIKey != "" {
+		r.Register(&LaPosteTracker{APIKey: laPosteAPIKey})
+		r.Register(&ColissimoTracker{APIKey: laPosteAPIKey})
+	}
 	r.Register(&GLSTracker{})
 	r.Register(&MondialRelayTracker{})
 	r.Register(&DPDTracker{})

@@ -7,6 +7,7 @@ import (
 )
 
 func TestNewRegistryRegistersAllCarriers(t *testing.T) {
+	t.Setenv("LAPOSTE_API_KEY", "test-key")
 	r := NewRegistry()
 
 	expectedCarriers := []model.CarrierCode{
@@ -30,6 +31,17 @@ func TestNewRegistryRegistersAllCarriers(t *testing.T) {
 	}
 }
 
+func TestNewRegistryHidesCarriersWithoutAPIKey(t *testing.T) {
+	t.Setenv("LAPOSTE_API_KEY", "")
+	r := NewRegistry()
+
+	for _, code := range []model.CarrierCode{model.CarrierLaPoste, model.CarrierColissimo} {
+		if _, ok := r.Get(code); ok {
+			t.Errorf("carrier %q should not be registered without LAPOSTE_API_KEY", code)
+		}
+	}
+}
+
 func TestRegistryGetUnknownCarrier(t *testing.T) {
 	r := NewRegistry()
 
@@ -40,6 +52,7 @@ func TestRegistryGetUnknownCarrier(t *testing.T) {
 }
 
 func TestRegistryAvailable(t *testing.T) {
+	t.Setenv("LAPOSTE_API_KEY", "test-key")
 	r := NewRegistry()
 
 	carriers := r.Available()
