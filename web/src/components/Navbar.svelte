@@ -3,6 +3,7 @@
   import { logout } from "../lib/api";
   import { toggleTheme, isDarkTheme } from "../lib/utils";
   import { t, getLocale, setLocale, supportedLocales } from "../lib/i18n.svelte";
+  import { isPushSupported, isPushEnabled, isPushLoading, togglePush } from "../lib/push.svelte";
 
   let dark = $state(isDarkTheme());
 
@@ -41,6 +42,28 @@
       >
         {getLocale()}
       </button>
+
+      {#if isPushSupported()}
+        <button
+          onclick={togglePush}
+          disabled={isPushLoading()}
+          class="p-2 rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer disabled:opacity-50"
+          class:text-[var(--color-accent)]={isPushEnabled()}
+          class:text-[var(--color-text-secondary)]={!isPushEnabled()}
+          aria-label={t("nav.notifications")}
+          title={isPushEnabled() ? t("nav.notificationsOn") : t("nav.notificationsOff")}
+        >
+          {#if isPushEnabled()}
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/>
+            </svg>
+          {:else}
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+            </svg>
+          {/if}
+        </button>
+      {/if}
 
       <button
         onclick={handleToggleTheme}

@@ -39,6 +39,9 @@ func New(h *handler.Handler, a *auth.Auth, distFS fs.FS, logger *slog.Logger) ht
 			handler.HealthCheck(w, r, h)
 		})
 
+		// VAPID key is public (needed before push subscription)
+		r.Get("/notifications/vapid-key", h.GetVAPIDKey)
+
 		r.Group(func(r chi.Router) {
 			r.Use(a.Middleware)
 
@@ -57,6 +60,9 @@ func New(h *handler.Handler, a *auth.Auth, distFS fs.FS, logger *slog.Logger) ht
 					r.Delete("/events/{eventID}", h.DeleteEvent)
 				})
 			})
+
+			r.Post("/notifications/subscribe", h.Subscribe)
+			r.Delete("/notifications/subscribe", h.Unsubscribe)
 		})
 	})
 
