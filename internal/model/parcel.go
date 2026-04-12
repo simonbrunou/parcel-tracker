@@ -32,6 +32,7 @@ const (
 	CarrierDPD          CarrierCode = "dpd"
 	CarrierColisPrive   CarrierCode = "colisprive"
 	CarrierRelaisColis  CarrierCode = "relaiscolis"
+	CarrierVintedGo     CarrierCode = "vintedgo"
 )
 
 // IsValid reports whether the carrier code is a known carrier.
@@ -39,7 +40,8 @@ func (c CarrierCode) IsValid() bool {
 	switch c {
 	case CarrierManual, CarrierMock, CarrierUSPS, CarrierFedEx, CarrierUPS, CarrierDHL,
 		CarrierPostNL, CarrierColissimo, CarrierChronopost, CarrierLaPoste,
-		CarrierMondialRelay, CarrierGLS, CarrierDPD, CarrierColisPrive, CarrierRelaisColis:
+		CarrierMondialRelay, CarrierGLS, CarrierDPD, CarrierColisPrive, CarrierRelaisColis,
+		CarrierVintedGo:
 		return true
 	}
 	return false

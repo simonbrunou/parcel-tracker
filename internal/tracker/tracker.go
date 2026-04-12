@@ -50,6 +50,7 @@ func NewRegistry() *Registry {
 	r.Register(&DPDTracker{})
 	r.Register(&ColisPriveTracker{})
 	r.Register(&RelaisColisTracker{})
+	r.Register(&VintedGoTracker{})
 	return r
 }
 
