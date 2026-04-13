@@ -142,6 +142,9 @@ func (h *Handler) CreateParcel(w http.ResponseWriter, r *http.Request) {
 				now := time.Now().UTC()
 				p.LastCheck = &now
 				p.EstimatedDelivery = result.EstimatedDelivery
+				if events, err := h.Store.ListEvents(ctx, parcelID); err == nil && len(events) > 0 {
+					p.Status = events[0].Status // events are ordered by timestamp DESC
+				}
 				if _, err := h.Store.UpdateParcel(ctx, p); err != nil {
 					h.Logger.Error("auto-refresh: failed to update parcel",
 						"parcel_id", parcelID,
@@ -253,13 +256,16 @@ func (h *Handler) RefreshParcel(w http.ResponseWriter, r *http.Request) {
 		h.Store.CreateEvent(r.Context(), e)
 	}
 
-	// Re-read parcel to pick up status changes made by CreateEvent,
-	// then update last_check. Without this re-read, UpdateParcel would
-	// overwrite the status back to its pre-refresh value.
+	// Re-read parcel, then reconcile its status with the most recent event.
+	// This also fixes parcels whose status was set incorrectly by older code
+	// that blindly used each event's status during insertion.
 	parcel, _ = h.Store.GetParcel(r.Context(), id)
 	now := time.Now().UTC()
 	parcel.LastCheck = &now
 	parcel.EstimatedDelivery = result.EstimatedDelivery
+	if events, err := h.Store.ListEvents(r.Context(), parcel.ID); err == nil && len(events) > 0 {
+		parcel.Status = events[0].Status // events are ordered by timestamp DESC
+	}
 	h.Store.UpdateParcel(r.Context(), parcel)
 
 	writeJSON(w, http.StatusOK, parcel)
