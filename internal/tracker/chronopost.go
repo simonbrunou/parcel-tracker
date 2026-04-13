@@ -152,7 +152,7 @@ func parseChronopostResponse(data []byte) (TrackResult, error) {
 		location := buildLocation(e.OfficeLabel, e.ZipCode)
 
 		result.Events = append(result.Events, model.TrackingEvent{
-			Status:    mapChronopostStatus(e.Code),
+			Status:    mapChronopostStatus(e.Code, e.Label),
 			Message:   e.Label,
 			Location:  location,
 			Timestamp: ts.UTC(),
@@ -214,21 +214,27 @@ func buildLocation(site, zipCode string) string {
 //	MD = Mise en distribution                    — out for delivery
 //	LV = Delivered (livré)                       — delivered
 //	RM = Remis au destinataire                   — delivered
+//	BL = Delivered to mailbox (boîte aux lettres)— delivered
+//	LP = Delivered to pickup point               — delivered
 //	D1,D2,D3... = Historical delivered variants  — delivered
 //	LE = Return to sender                        — failed
 //	RE = Refused / returned                      — failed
 //	AR = Anomaly / issue                         — failed
 //
-// Unknown codes fall back to StatusInTransit.
-func mapChronopostStatus(code string) model.ParcelStatus {
+// When the event code is not recognised, the event label is inspected for
+// French/English delivery keywords as a fallback (same approach used by DPD,
+// GLS, and other carrier trackers in this codebase).
+func mapChronopostStatus(code, label string) model.ParcelStatus {
 	upper := strings.ToUpper(strings.TrimSpace(code))
 
 	switch {
-	// Delivered. Match LV, RM, and legacy D + digit variants (D1, D2, ...).
+	// Delivered. Match LV, RM, BL, LP and legacy D + digit variants (D1, D2, ...).
 	// We deliberately do NOT match every "D*" because DC means "preparation
 	// at sender", not delivered.
 	case strings.HasPrefix(upper, "LV"),
 		strings.HasPrefix(upper, "RM"),
+		strings.HasPrefix(upper, "BL"),
+		strings.HasPrefix(upper, "LP"),
 		len(upper) >= 2 && upper[0] == 'D' && upper[1] >= '0' && upper[1] <= '9':
 		return model.StatusDelivered
 	// Out for delivery.
@@ -242,12 +248,49 @@ func mapChronopostStatus(code string) model.ParcelStatus {
 		strings.HasPrefix(upper, "PH"),
 		strings.HasPrefix(upper, "RG"):
 		return model.StatusInfoReceived
+	// In transit: known transit codes that must NOT fall through to the
+	// label-based fallback (their labels often contain "livraison" or
+	// "distribution" which would cause false positives).
+	case strings.HasPrefix(upper, "EC"),
+		strings.HasPrefix(upper, "TS"),
+		strings.HasPrefix(upper, "TA"),
+		strings.HasPrefix(upper, "TI"),
+		strings.HasPrefix(upper, "SD"),
+		strings.HasPrefix(upper, "IS"):
+		return model.StatusInTransit
 	// Failed / returned / refused / anomaly.
 	case strings.HasPrefix(upper, "LE"),
 		strings.HasPrefix(upper, "RE"),
 		strings.HasPrefix(upper, "AR"):
 		return model.StatusFailed
-	// In transit: EC, TS, TA, TI, SD, IS and any unknown code.
+	// Unknown code: fall back to label-based keyword matching.
+	default:
+		return mapChronopostStatusFromLabel(label)
+	}
+}
+
+// mapChronopostStatusFromLabel inspects the event label for French/English
+// keywords when the event code is not recognised. "Out for delivery" is checked
+// before "delivered" because both can contain the substring "livr".
+func mapChronopostStatusFromLabel(label string) model.ParcelStatus {
+	lower := strings.ToLower(label)
+
+	switch {
+	// Out for delivery must be checked before delivered (both contain "livr").
+	case strings.Contains(lower, "en cours de livraison") ||
+		strings.Contains(lower, "mis en livraison"):
+		return model.StatusOutForDelivery
+	// Failed must be checked before delivered ("non distribu" contains "distribu").
+	case strings.Contains(lower, "non distribu") ||
+		strings.Contains(lower, "retour") ||
+		strings.Contains(lower, "refus") ||
+		strings.Contains(lower, "anomalie"):
+		return model.StatusFailed
+	case strings.Contains(lower, "livr") ||
+		strings.Contains(lower, "remis") ||
+		strings.Contains(lower, "distribu") ||
+		strings.Contains(lower, "delivered"):
+		return model.StatusDelivered
 	default:
 		return model.StatusInTransit
 	}
