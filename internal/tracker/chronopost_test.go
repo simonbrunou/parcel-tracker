@@ -177,44 +177,63 @@ func TestParseChronopostResponseSOAPFault(t *testing.T) {
 func TestMapChronopostStatus(t *testing.T) {
 	tests := []struct {
 		code   string
+		label  string
 		status model.ParcelStatus
 	}{
-		// Delivered
-		{"LV", model.StatusDelivered},
-		{"RM", model.StatusDelivered},
-		{"D1", model.StatusDelivered},
-		{"D2", model.StatusDelivered},
+		// Delivered (by code)
+		{"LV", "", model.StatusDelivered},
+		{"RM", "", model.StatusDelivered},
+		{"BL", "", model.StatusDelivered},
+		{"LP", "", model.StatusDelivered},
+		{"D1", "", model.StatusDelivered},
+		{"D2", "", model.StatusDelivered},
 		// Out for delivery
-		{"LT", model.StatusOutForDelivery},
-		{"CR1", model.StatusOutForDelivery},
-		{"MD1", model.StatusOutForDelivery},
+		{"LT", "", model.StatusOutForDelivery},
+		{"CR1", "", model.StatusOutForDelivery},
+		{"MD1", "", model.StatusOutForDelivery},
 		// Info received / preparation / pickup
-		{"DC", model.StatusInfoReceived},
-		{"EP1", model.StatusInfoReceived},
-		{"PH1", model.StatusInfoReceived},
-		{"RG", model.StatusInfoReceived},
+		{"DC", "", model.StatusInfoReceived},
+		{"EP1", "", model.StatusInfoReceived},
+		{"PH1", "", model.StatusInfoReceived},
+		{"RG", "", model.StatusInfoReceived},
 		// In transit
-		{"EC", model.StatusInTransit},
-		{"TS", model.StatusInTransit},
-		{"SD", model.StatusInTransit}, // sorted at depot, NOT out for delivery
-		{"IS", model.StatusInTransit},
-		{"TA1", model.StatusInTransit},
-		{"TI1", model.StatusInTransit},
+		{"EC", "", model.StatusInTransit},
+		{"TS", "", model.StatusInTransit},
+		{"SD", "", model.StatusInTransit}, // sorted at depot, NOT out for delivery
+		{"IS", "", model.StatusInTransit},
+		{"TA1", "", model.StatusInTransit},
+		{"TI1", "", model.StatusInTransit},
 		// Padded with whitespace (Chronopost real-world format)
-		{"DC ", model.StatusInfoReceived},
-		{"SD ", model.StatusInTransit},
+		{"DC ", "", model.StatusInfoReceived},
+		{"SD ", "", model.StatusInTransit},
 		// Failed
-		{"LE1", model.StatusFailed},
-		{"RE1", model.StatusFailed},
-		{"AR1", model.StatusFailed},
-		// Unknown
-		{"XX", model.StatusInTransit},
+		{"LE1", "", model.StatusFailed},
+		{"RE1", "", model.StatusFailed},
+		{"AR1", "", model.StatusFailed},
+		// Unknown code, no label
+		{"XX", "", model.StatusInTransit},
+
+		// Label-based fallback for unknown codes
+		{"XX", "Colis livré", model.StatusDelivered},
+		{"XX", "Remis au destinataire", model.StatusDelivered},
+		{"XX", "Distribué", model.StatusDelivered},
+		{"XX", "Package delivered", model.StatusDelivered},
+		{"XX", "Colis en cours de livraison", model.StatusOutForDelivery},
+		{"XX", "Mis en livraison", model.StatusOutForDelivery},
+		{"XX", "Retour à l'expéditeur", model.StatusFailed},
+		{"XX", "Refusé par le destinataire", model.StatusFailed},
+		{"XX", "Anomalie constatée", model.StatusFailed},
+		{"XX", "Non distribué", model.StatusFailed},
+		{"XX", "Colis en cours d'acheminement", model.StatusInTransit},
+
+		// Code takes priority over label: DC is InfoReceived even if label contains "livr"
+		{"DC", "Colis livré au voisin", model.StatusInfoReceived},
 	}
 
 	for _, tt := range tests {
-		got := mapChronopostStatus(tt.code)
+		got := mapChronopostStatus(tt.code, tt.label)
 		if got != tt.status {
-			t.Errorf("mapChronopostStatus(%q) = %q, want %q", tt.code, got, tt.status)
+			t.Errorf("mapChronopostStatus(%q, %q) = %q, want %q", tt.code, tt.label, got, tt.status)
 		}
 	}
 }
