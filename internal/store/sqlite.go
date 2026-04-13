@@ -298,10 +298,14 @@ func (s *SQLiteStore) CreateEvent(ctx context.Context, e model.TrackingEvent) (m
 		return model.TrackingEvent{}, err
 	}
 
-	// Update parcel status and timestamp
+	// Update parcel status to the most recent event's status by timestamp.
+	// This avoids incorrect status when events are inserted out of chronological order
+	// (e.g. carrier API returns newest events first).
 	if _, err := s.db.ExecContext(ctx,
-		"UPDATE parcels SET status = ?, updated_at = ? WHERE id = ?",
-		e.Status, time.Now().UTC(), e.ParcelID); err != nil {
+		`UPDATE parcels SET status = (
+			SELECT status FROM tracking_events WHERE parcel_id = ? ORDER BY timestamp DESC LIMIT 1
+		), updated_at = ? WHERE id = ?`,
+		e.ParcelID, time.Now().UTC(), e.ParcelID); err != nil {
 		return e, fmt.Errorf("update parcel status: %w", err)
 	}
 

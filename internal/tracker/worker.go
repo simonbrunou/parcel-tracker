@@ -100,9 +100,9 @@ func (w *Worker) refreshParcel(ctx context.Context, p model.Parcel) {
 		newCount++
 	}
 
-	// Re-read parcel to pick up status changes made by CreateEvent,
-	// then update last_check. Without this, UpdateParcel would overwrite
-	// the status back to its pre-refresh value.
+	// Re-read parcel, then reconcile its status with the most recent event.
+	// This also fixes parcels whose status was set incorrectly by older code
+	// that blindly used each event's status during insertion.
 	updated, err := w.Store.GetParcel(ctx, p.ID)
 	if err != nil {
 		w.Logger.Error("worker: failed to re-read parcel", "parcel_id", p.ID, "error", err)
@@ -111,6 +111,9 @@ func (w *Worker) refreshParcel(ctx context.Context, p model.Parcel) {
 	now := time.Now().UTC()
 	updated.LastCheck = &now
 	updated.EstimatedDelivery = result.EstimatedDelivery
+	if events, err := w.Store.ListEvents(ctx, p.ID); err == nil && len(events) > 0 {
+		updated.Status = events[0].Status // events are ordered by timestamp DESC
+	}
 	if _, err := w.Store.UpdateParcel(ctx, updated); err != nil {
 		w.Logger.Error("worker: failed to update parcel", "parcel_id", p.ID, "error", err)
 	}
