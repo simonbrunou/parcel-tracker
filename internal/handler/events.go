@@ -20,6 +20,7 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	parcelID := chi.URLParam(r, "id")
 	events, err := h.Store.ListEvents(r.Context(), parcelID)
 	if err != nil {
+		h.Logger.Error("failed to list events", "parcel_id", parcelID, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to list events")
 		return
 	}
@@ -58,6 +59,7 @@ func (h *Handler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 
 	created, err := h.Store.CreateEvent(r.Context(), event)
 	if err != nil {
+		h.Logger.Error("failed to create event", "parcel_id", parcelID, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to create event")
 		return
 	}
@@ -71,6 +73,7 @@ func (h *Handler) DeleteEvent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "event not found")
 		return
 	} else if err != nil {
+		h.Logger.Error("failed to delete event", "event_id", eventID, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to delete event")
 		return
 	}

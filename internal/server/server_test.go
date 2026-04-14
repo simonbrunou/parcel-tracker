@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -30,7 +31,9 @@ func newTestServer(t *testing.T, distFS fs.FS) http.Handler {
 		Logger:  slog.Default(),
 	}
 
-	return New(h, a, distFS, slog.Default())
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	return New(ctx, h, a, distFS, slog.Default())
 }
 
 func TestPingEndpoint(t *testing.T) {

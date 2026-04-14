@@ -43,8 +43,8 @@
         await login(password);
       }
       push("/");
-    } catch (err: any) {
-      error = err.message || t("login.failed");
+    } catch (err: unknown) {
+      error = err instanceof Error ? err.message : t("login.failed");
     } finally {
       loading = false;
     }

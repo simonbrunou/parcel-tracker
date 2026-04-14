@@ -158,7 +158,7 @@ func TestExtractTokenEmpty(t *testing.T) {
 
 func TestSetSessionCookie(t *testing.T) {
 	w := httptest.NewRecorder()
-	SetSessionCookie(w, "test-token")
+	SetSessionCookie(w, "test-token", true)
 
 	cookies := w.Result().Cookies()
 	if len(cookies) != 1 {
@@ -174,6 +174,9 @@ func TestSetSessionCookie(t *testing.T) {
 	if !c.HttpOnly {
 		t.Error("expected HttpOnly cookie")
 	}
+	if !c.Secure {
+		t.Error("expected Secure cookie")
+	}
 	if c.SameSite != http.SameSiteStrictMode {
 		t.Errorf("expected SameSiteStrict, got %v", c.SameSite)
 	}
@@ -182,9 +185,22 @@ func TestSetSessionCookie(t *testing.T) {
 	}
 }
 
+func TestSetSessionCookieInsecure(t *testing.T) {
+	w := httptest.NewRecorder()
+	SetSessionCookie(w, "test-token", false)
+
+	cookies := w.Result().Cookies()
+	if len(cookies) != 1 {
+		t.Fatalf("expected 1 cookie, got %d", len(cookies))
+	}
+	if cookies[0].Secure {
+		t.Error("expected non-Secure cookie in dev mode")
+	}
+}
+
 func TestClearSessionCookie(t *testing.T) {
 	w := httptest.NewRecorder()
-	ClearSessionCookie(w)
+	ClearSessionCookie(w, true)
 
 	cookies := w.Result().Cookies()
 	if len(cookies) != 1 {
@@ -192,6 +208,9 @@ func TestClearSessionCookie(t *testing.T) {
 	}
 	if cookies[0].MaxAge != -1 {
 		t.Errorf("expected MaxAge=-1, got %d", cookies[0].MaxAge)
+	}
+	if !cookies[0].Secure {
+		t.Error("expected Secure cookie")
 	}
 }
 

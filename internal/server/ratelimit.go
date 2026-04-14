@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"sync"
@@ -27,6 +28,28 @@ func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
 		limit:   limit,
 		window:  window,
 	}
+}
+
+// StartCleanup runs a background goroutine that periodically removes expired buckets.
+func (rl *RateLimiter) StartCleanup(ctx context.Context, interval time.Duration) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case now := <-ticker.C:
+				rl.mu.Lock()
+				for key, b := range rl.buckets {
+					if now.Sub(b.lastReset) >= rl.window {
+						delete(rl.buckets, key)
+					}
+				}
+				rl.mu.Unlock()
+			}
+		}
+	}()
 }
 
 // Allow checks whether a request from the given key is allowed.

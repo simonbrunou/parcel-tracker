@@ -50,7 +50,7 @@ func (t *RelaisColisTracker) Track(ctx context.Context, trackingNumber string) (
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 5<<20))
 	if err != nil {
 		return TrackResult{}, fmt.Errorf("relaiscolis: read response: %w", err)
 	}

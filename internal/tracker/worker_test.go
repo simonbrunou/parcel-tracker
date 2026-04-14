@@ -25,11 +25,12 @@ func TestEventKey(t *testing.T) {
 	e := model.TrackingEvent{
 		Status:    model.StatusInTransit,
 		Message:   "In transit",
+		Location:  "Paris",
 		Timestamp: ts,
 	}
 
 	key := EventKey(e)
-	expected := "2025-06-01T10:00:00Z|in_transit|In transit"
+	expected := "2025-06-01T10:00:00Z|in_transit|In transit|Paris"
 	if key != expected {
 		t.Errorf("expected key %q, got %q", expected, key)
 	}

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -13,7 +14,7 @@ import (
 	"github.com/simonbrunou/parcel-tracker/internal/handler"
 )
 
-func New(h *handler.Handler, a *auth.Auth, distFS fs.FS, logger *slog.Logger) http.Handler {
+func New(ctx context.Context, h *handler.Handler, a *auth.Auth, distFS fs.FS, logger *slog.Logger) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.Logger)
@@ -23,6 +24,7 @@ func New(h *handler.Handler, a *auth.Auth, distFS fs.FS, logger *slog.Logger) ht
 	r.Use(middleware.Heartbeat("/ping"))
 
 	rl := NewRateLimiter(10, time.Minute)
+	rl.StartCleanup(ctx, 5*time.Minute)
 
 	r.Route("/api", func(r chi.Router) {
 		// Rate-limited auth endpoints

@@ -15,6 +15,7 @@
   import { addToast } from "../lib/toast.svelte";
   import StatusBadge from "../components/StatusBadge.svelte";
   import ParcelTimeline from "../components/ParcelTimeline.svelte";
+  import ConfirmDialog from "../components/ConfirmDialog.svelte";
   import Navbar from "../components/Navbar.svelte";
 
   let { params }: { params: { id: string } } = $props();
@@ -50,12 +51,13 @@
       ]);
       parcel = p;
       events = e;
-    } catch (err: any) {
-      if (err?.status === 404) {
+    } catch (err: unknown) {
+      if (err instanceof Error && "status" in err && (err as any).status === 404) {
         push("/");
         return;
       }
-      error = err?.message || t("detail.loadFailed");
+      const msg = err instanceof Error ? err.message : t("detail.loadFailed");
+      error = msg;
     } finally {
       loading = false;
     }
@@ -71,8 +73,9 @@
       parcel = await refreshParcel(params.id);
       events = await listEvents(params.id);
       addToast(t("toast.trackingRefreshed"));
-    } catch (err: any) {
-      addToast(err?.message || t("toast.error"), "error");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : t("toast.error");
+      addToast(t("detail.refreshFailed") + ": " + msg, "error");
     } finally {
       refreshing = false;
     }
@@ -83,8 +86,9 @@
       await deleteParcel(params.id);
       addToast(t("toast.parcelDeleted"));
       push("/");
-    } catch (err: any) {
-      addToast(err?.message || t("toast.error"), "error");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : t("toast.error");
+      addToast(msg, "error");
       showDelete = false;
     }
   }
@@ -95,8 +99,9 @@
     try {
       parcel = await updateParcel(params.id, { ...parcel, archived: !parcel.archived });
       addToast(t(wasArchived ? "toast.parcelUnarchived" : "toast.parcelArchived"));
-    } catch (err: any) {
-      addToast(err?.message || t("toast.error"), "error");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : t("toast.error");
+      addToast(msg, "error");
     } finally {
       showArchiveConfirm = false;
     }
@@ -115,8 +120,9 @@
       eventLocation = "";
       showAddEvent = false;
       await load();
-    } catch (err: any) {
-      addToast(err?.message || t("toast.error"), "error");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : t("toast.error");
+      addToast(msg, "error");
     }
   }
 
@@ -142,16 +148,12 @@
       });
       addToast(t("toast.parcelUpdated"));
       editing = false;
-    } catch (err: any) {
-      addToast(err?.message || t("toast.error"), "error");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : t("toast.error");
+      addToast(msg, "error");
     }
   }
 
-  function handleDialogKeydown(e: KeyboardEvent, closeDialog: () => void) {
-    if (e.key === "Escape") {
-      closeDialog();
-    }
-  }
 </script>
 
 <Navbar />
@@ -353,72 +355,23 @@
 
     <ParcelTimeline {events} />
 
-    <!-- Delete confirmation -->
-    {#if showDelete}
-      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-      <div
-        class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="delete-dialog-title"
-        onkeydown={(e) => handleDialogKeydown(e, () => { showDelete = false; })}
-      >
-        <div class="bg-[var(--color-surface)] rounded-xl p-6 max-w-sm w-full shadow-xl">
-          <h3 id="delete-dialog-title" class="text-lg font-semibold text-[var(--color-text-primary)] mb-2">{t("detail.deleteTitle")}</h3>
-          <p class="text-[var(--color-text-secondary)] text-sm mb-5">
-            {t("detail.deleteMessage")}
-          </p>
-          <div class="flex gap-3">
-            <button
-              onclick={() => { showDelete = false; }}
-              class="flex-1 py-2 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer"
-            >
-              {t("common.cancel")}
-            </button>
-            <button
-              onclick={handleDelete}
-              class="flex-1 py-2 bg-[var(--color-danger)] hover:bg-[var(--color-danger-hover)] text-white rounded-lg transition-colors cursor-pointer"
-            >
-              {t("common.delete")}
-            </button>
-          </div>
-        </div>
-      </div>
-    {/if}
+    <ConfirmDialog
+      show={showDelete}
+      title={t("detail.deleteTitle")}
+      message={t("detail.deleteMessage")}
+      confirmLabel={t("common.delete")}
+      confirmClass="bg-[var(--color-danger)] hover:bg-[var(--color-danger-hover)] text-white"
+      onConfirm={handleDelete}
+      onCancel={() => { showDelete = false; }}
+    />
 
-    <!-- Archive confirmation -->
-    {#if showArchiveConfirm}
-      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-      <div
-        class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="archive-dialog-title"
-        onkeydown={(e) => handleDialogKeydown(e, () => { showArchiveConfirm = false; })}
-      >
-        <div class="bg-[var(--color-surface)] rounded-xl p-6 max-w-sm w-full shadow-xl">
-          <h3 id="archive-dialog-title" class="text-lg font-semibold text-[var(--color-text-primary)] mb-2">
-            {parcel.archived ? t("detail.unarchiveTitle") : t("detail.archiveTitle")}
-          </h3>
-          <p class="text-[var(--color-text-secondary)] text-sm mb-5">
-            {parcel.archived ? t("detail.unarchiveMessage") : t("detail.archiveMessage")}
-          </p>
-          <div class="flex gap-3">
-            <button
-              onclick={() => { showArchiveConfirm = false; }}
-              class="flex-1 py-2 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer"
-            >
-              {t("common.cancel")}
-            </button>
-            <button
-              onclick={handleArchive}
-              class="flex-1 py-2 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-lg transition-colors cursor-pointer"
-            >
-              {parcel.archived ? t("detail.unarchive") : t("detail.archive")}
-            </button>
-          </div>
-        </div>
-      </div>
-    {/if}
+    <ConfirmDialog
+      show={showArchiveConfirm}
+      title={parcel.archived ? t("detail.unarchiveTitle") : t("detail.archiveTitle")}
+      message={parcel.archived ? t("detail.unarchiveMessage") : t("detail.archiveMessage")}
+      confirmLabel={parcel.archived ? t("detail.unarchive") : t("detail.archive")}
+      onConfirm={handleArchive}
+      onCancel={() => { showArchiveConfirm = false; }}
+    />
   {/if}
 </main>

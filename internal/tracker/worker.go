@@ -59,13 +59,34 @@ func (w *Worker) refreshAll(ctx context.Context) {
 	}
 }
 
+// trackWithRetry wraps a Track call with retries and exponential backoff.
+func trackWithRetry(ctx context.Context, t Tracker, trackingNumber string, maxRetries int) (TrackResult, error) {
+	var result TrackResult
+	var err error
+	for attempt := range maxRetries + 1 {
+		result, err = t.Track(ctx, trackingNumber)
+		if err == nil || ctx.Err() != nil {
+			return result, err
+		}
+		if attempt < maxRetries {
+			backoff := time.Duration(1<<uint(attempt)) * time.Second // 1s, 2s
+			select {
+			case <-ctx.Done():
+				return result, ctx.Err()
+			case <-time.After(backoff):
+			}
+		}
+	}
+	return result, err
+}
+
 func (w *Worker) refreshParcel(ctx context.Context, p model.Parcel) {
 	t, ok := w.Registry.Get(p.Carrier)
 	if !ok {
 		return
 	}
 
-	result, err := t.Track(ctx, p.TrackingNumber)
+	result, err := trackWithRetry(ctx, t, p.TrackingNumber, 2)
 	if err != nil {
 		w.Logger.Warn("worker: tracking failed",
 			"parcel_id", p.ID,
@@ -133,5 +154,5 @@ func (w *Worker) refreshParcel(ctx context.Context, p model.Parcel) {
 // EventKey returns a deduplication key for a tracking event.
 // Used by both the background worker and the HTTP refresh handler.
 func EventKey(e model.TrackingEvent) string {
-	return e.Timestamp.UTC().Format(time.RFC3339) + "|" + string(e.Status) + "|" + e.Message
+	return e.Timestamp.UTC().Format(time.RFC3339) + "|" + string(e.Status) + "|" + e.Message + "|" + e.Location
 }

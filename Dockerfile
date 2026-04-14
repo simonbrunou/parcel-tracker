@@ -17,12 +17,14 @@ RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /parcel-tracker ./cmd/parcel-trac
 
 # Stage 3: Final minimal image
 FROM alpine:3.21
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata curl
 RUN addgroup -S app && adduser -S app -G app
 RUN mkdir -p /data && chown app:app /data
 COPY --from=backend /parcel-tracker /usr/local/bin/parcel-tracker
 VOLUME /data
 ENV DATABASE_PATH=/data/parcel-tracker.db
 EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:8080/api/health || exit 1
 USER app
 ENTRYPOINT ["parcel-tracker"]

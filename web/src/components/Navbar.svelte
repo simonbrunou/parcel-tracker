@@ -13,7 +13,12 @@
   }
 
   async function handleLogout() {
-    await logout();
+    try {
+      await logout();
+    } catch {
+      // Even if the server request fails, redirect to login.
+      // The cookie will expire naturally.
+    }
     push("/login");
   }
 

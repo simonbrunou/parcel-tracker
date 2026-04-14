@@ -19,11 +19,12 @@ type HandlerNotifier interface {
 }
 
 type Handler struct {
-	Store    store.Store
-	Auth     *auth.Auth
-	Tracker  *tracker.Registry
-	Logger   *slog.Logger
-	Notifier HandlerNotifier
+	Store        store.Store
+	Auth         *auth.Auth
+	Tracker      *tracker.Registry
+	Logger       *slog.Logger
+	Notifier     HandlerNotifier
+	SecureCookie bool
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

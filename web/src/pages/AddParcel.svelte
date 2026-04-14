@@ -33,8 +33,9 @@
       });
       addToast(t("toast.parcelCreated"));
       push(`/parcels/${parcel.id}`);
-    } catch (err: any) {
-      error = err.message || t("addParcel.failed");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : t("addParcel.failed");
+      error = msg;
     } finally {
       loading = false;
     }
