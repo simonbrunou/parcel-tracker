@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -25,6 +26,10 @@ var version = "dev"
 
 func main() {
 	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		fmt.Fprintf(os.Stderr, "invalid configuration: %v\n", err)
+		os.Exit(1)
+	}
 
 	logLevel := slog.LevelInfo
 	if cfg.Dev {
@@ -68,11 +73,12 @@ func main() {
 
 	// Handlers
 	h := &handler.Handler{
-		Store:    db,
-		Auth:     a,
-		Tracker:  registry,
-		Logger:   logger,
-		Notifier: n,
+		Store:        db,
+		Auth:         a,
+		Tracker:      registry,
+		Logger:       logger,
+		Notifier:     n,
+		SecureCookie: !cfg.Dev,
 	}
 
 	// Embedded frontend
@@ -82,19 +88,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	// HTTP server
-	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.Port),
-		Handler:      server.New(h, a, distFS, logger),
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
-	}
-
 	// Background tracking worker
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 	defer workerCancel()
 
+	var wg sync.WaitGroup
 	if cfg.RefreshInterval > 0 {
 		w := &tracker.Worker{
 			Store:    db,
@@ -103,7 +101,20 @@ func main() {
 			Logger:   logger,
 			Notifier: n,
 		}
-		go w.Run(workerCtx)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			w.Run(workerCtx)
+		}()
+	}
+
+	// HTTP server
+	srv := &http.Server{
+		Addr:         fmt.Sprintf(":%d", cfg.Port),
+		Handler:      server.New(workerCtx, h, a, distFS, logger),
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 
 	// Graceful shutdown
@@ -114,6 +125,7 @@ func main() {
 
 		logger.Info("shutting down...")
 		workerCancel()
+		wg.Wait() // Wait for worker to finish before shutting down server.
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		srv.Shutdown(ctx)

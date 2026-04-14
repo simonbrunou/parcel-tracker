@@ -23,12 +23,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	auth.SetSessionCookie(w, token)
+	auth.SetSessionCookie(w, token, h.SecureCookie)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
-	auth.ClearSessionCookie(w)
+	auth.ClearSessionCookie(w, h.SecureCookie)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -79,6 +79,6 @@ func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	auth.SetSessionCookie(w, token)
+	auth.SetSessionCookie(w, token, h.SecureCookie)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

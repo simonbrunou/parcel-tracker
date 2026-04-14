@@ -61,7 +61,7 @@ func (t *MondialRelayTracker) Track(ctx context.Context, trackingNumber string) 
 		return TrackResult{}, fmt.Errorf("mondialrelay: unexpected status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 5<<20))
 	if err != nil {
 		return TrackResult{}, fmt.Errorf("mondialrelay: read response: %w", err)
 	}

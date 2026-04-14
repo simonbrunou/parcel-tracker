@@ -49,7 +49,7 @@ func (t *ChronopostTracker) Track(ctx context.Context, trackingNumber string) (T
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 5<<20))
 	if err != nil {
 		return TrackResult{}, fmt.Errorf("chronopost: read response: %w", err)
 	}

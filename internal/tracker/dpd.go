@@ -50,7 +50,7 @@ func (t *DPDTracker) Track(ctx context.Context, trackingNumber string) (TrackRes
 		return TrackResult{}, fmt.Errorf("dpd: unexpected status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 5<<20))
 	if err != nil {
 		return TrackResult{}, fmt.Errorf("dpd: read response: %w", err)
 	}

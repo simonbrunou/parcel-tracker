@@ -85,6 +85,7 @@ const en: Translations = {
   "detail.deleteTitle": "Delete parcel?",
   "detail.deleteMessage": "This will permanently delete this parcel and all its tracking events.",
   "detail.loadFailed": "Failed to load parcel",
+  "detail.refreshFailed": "Failed to refresh tracking",
 
   // Timeline
   "timeline.empty": "No tracking events yet",
@@ -215,6 +216,7 @@ const fr: Translations = {
   "detail.deleteTitle": "Supprimer le colis ?",
   "detail.deleteMessage": "Cela supprimera d\u00e9finitivement ce colis et tous ses \u00e9v\u00e9nements de suivi.",
   "detail.loadFailed": "\u00c9chec du chargement du colis",
+  "detail.refreshFailed": "\u00c9chec de l'actualisation du suivi",
 
   // Timeline
   "timeline.empty": "Aucun \u00e9v\u00e9nement de suivi",

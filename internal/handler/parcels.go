@@ -55,6 +55,7 @@ func (h *Handler) ListParcels(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.Store.ListParcels(r.Context(), filter)
 	if err != nil {
+		h.Logger.Error("failed to list parcels", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to list parcels")
 		return
 	}
@@ -70,6 +71,7 @@ func (h *Handler) GetParcel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
+		h.Logger.Error("failed to get parcel", "parcel_id", id, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to get parcel")
 		return
 	}
@@ -109,6 +111,7 @@ func (h *Handler) CreateParcel(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, "a parcel with this tracking number and carrier already exists")
 			return
 		}
+		h.Logger.Error("failed to create parcel", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to create parcel")
 		return
 	}
@@ -167,6 +170,7 @@ func (h *Handler) UpdateParcel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
+		h.Logger.Error("failed to get parcel for update", "parcel_id", id, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to get parcel")
 		return
 	}
@@ -197,6 +201,7 @@ func (h *Handler) UpdateParcel(w http.ResponseWriter, r *http.Request) {
 
 	updated, err := h.Store.UpdateParcel(r.Context(), existing)
 	if err != nil {
+		h.Logger.Error("failed to update parcel", "parcel_id", id, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to update parcel")
 		return
 	}
@@ -242,7 +247,12 @@ func (h *Handler) RefreshParcel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Load existing events to avoid duplicates.
-	existing, _ := h.Store.ListEvents(r.Context(), parcel.ID)
+	existing, err := h.Store.ListEvents(r.Context(), parcel.ID)
+	if err != nil {
+		h.Logger.Error("refresh: failed to list existing events", "parcel_id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to list events")
+		return
+	}
 	seen := make(map[string]bool, len(existing))
 	for _, e := range existing {
 		seen[tracker.EventKey(e)] = true
@@ -253,20 +263,31 @@ func (h *Handler) RefreshParcel(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		e.ParcelID = parcel.ID
-		h.Store.CreateEvent(r.Context(), e)
+		if _, err := h.Store.CreateEvent(r.Context(), e); err != nil {
+			h.Logger.Error("refresh: failed to create event", "parcel_id", id, "error", err)
+		}
 	}
 
 	// Re-read parcel, then reconcile its status with the most recent event.
 	// This also fixes parcels whose status was set incorrectly by older code
 	// that blindly used each event's status during insertion.
-	parcel, _ = h.Store.GetParcel(r.Context(), id)
+	parcel, err = h.Store.GetParcel(r.Context(), id)
+	if err != nil {
+		h.Logger.Error("refresh: failed to re-read parcel", "parcel_id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to refresh parcel")
+		return
+	}
 	now := time.Now().UTC()
 	parcel.LastCheck = &now
 	parcel.EstimatedDelivery = result.EstimatedDelivery
 	if events, err := h.Store.ListEvents(r.Context(), parcel.ID); err == nil && len(events) > 0 {
 		parcel.Status = events[0].Status // events are ordered by timestamp DESC
 	}
-	h.Store.UpdateParcel(r.Context(), parcel)
+	if _, err := h.Store.UpdateParcel(r.Context(), parcel); err != nil {
+		h.Logger.Error("refresh: failed to update parcel", "parcel_id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to update parcel")
+		return
+	}
 
 	writeJSON(w, http.StatusOK, parcel)
 }

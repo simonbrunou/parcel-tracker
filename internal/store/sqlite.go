@@ -38,62 +38,107 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 	return s, nil
 }
 
+func (s *SQLiteStore) Ping(ctx context.Context) error {
+	return s.db.PingContext(ctx)
+}
+
 func (s *SQLiteStore) Close() error {
 	return s.db.Close()
 }
 
 func (s *SQLiteStore) migrate() error {
-	_, err := s.db.Exec(`
-		CREATE TABLE IF NOT EXISTS parcels (
-			id TEXT PRIMARY KEY,
-			tracking_number TEXT NOT NULL,
-			carrier TEXT NOT NULL DEFAULT 'manual',
-			name TEXT NOT NULL DEFAULT '',
-			notes TEXT NOT NULL DEFAULT '',
-			status TEXT NOT NULL DEFAULT 'unknown',
-			archived INTEGER NOT NULL DEFAULT 0,
-			last_check DATETIME,
-			created_at DATETIME NOT NULL DEFAULT (datetime('now')),
-			updated_at DATETIME NOT NULL DEFAULT (datetime('now'))
-		);
-
-		CREATE TABLE IF NOT EXISTS tracking_events (
-			id TEXT PRIMARY KEY,
-			parcel_id TEXT NOT NULL REFERENCES parcels(id) ON DELETE CASCADE,
-			status TEXT NOT NULL DEFAULT 'unknown',
-			message TEXT NOT NULL DEFAULT '',
-			location TEXT NOT NULL DEFAULT '',
-			timestamp DATETIME NOT NULL DEFAULT (datetime('now')),
-			created_at DATETIME NOT NULL DEFAULT (datetime('now'))
-		);
-
-		CREATE INDEX IF NOT EXISTS idx_tracking_events_parcel_id ON tracking_events(parcel_id);
-		CREATE INDEX IF NOT EXISTS idx_parcels_status ON parcels(status);
-		CREATE UNIQUE INDEX IF NOT EXISTS idx_parcels_tracking_carrier ON parcels(tracking_number, carrier) WHERE archived = 0;
-		CREATE INDEX IF NOT EXISTS idx_parcels_archived ON parcels(archived);
-		CREATE INDEX IF NOT EXISTS idx_parcels_updated_at ON parcels(updated_at);
-
-		CREATE TABLE IF NOT EXISTS settings (
-			key TEXT PRIMARY KEY,
-			value TEXT NOT NULL DEFAULT ''
-		);
-
-		CREATE TABLE IF NOT EXISTS push_subscriptions (
-			id TEXT PRIMARY KEY,
-			endpoint TEXT NOT NULL UNIQUE,
-			p256dh TEXT NOT NULL,
-			auth TEXT NOT NULL,
-			created_at DATETIME NOT NULL DEFAULT (datetime('now'))
-		);
-	`)
-	if err != nil {
+	// Create schema_version table to track migration state.
+	if _, err := s.db.Exec(`CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)`); err != nil {
 		return err
 	}
 
-	// Add estimated_delivery column if it doesn't exist (migration for existing DBs).
-	_, err = s.db.Exec(`ALTER TABLE parcels ADD COLUMN estimated_delivery DATETIME`)
-	if err != nil && !strings.Contains(err.Error(), "duplicate column") {
-		return err
+	var currentVersion int
+	err := s.db.QueryRow("SELECT version FROM schema_version LIMIT 1").Scan(&currentVersion)
+	if err != nil {
+		// No row yet — initialise at 0.
+		currentVersion = 0
+	}
+
+	migrations := []struct {
+		version int
+		sql     string
+	}{
+		{1, `
+			CREATE TABLE IF NOT EXISTS parcels (
+				id TEXT PRIMARY KEY,
+				tracking_number TEXT NOT NULL,
+				carrier TEXT NOT NULL DEFAULT 'manual',
+				name TEXT NOT NULL DEFAULT '',
+				notes TEXT NOT NULL DEFAULT '',
+				status TEXT NOT NULL DEFAULT 'unknown',
+				archived INTEGER NOT NULL DEFAULT 0,
+				last_check DATETIME,
+				created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+				updated_at DATETIME NOT NULL DEFAULT (datetime('now'))
+			);
+
+			CREATE TABLE IF NOT EXISTS tracking_events (
+				id TEXT PRIMARY KEY,
+				parcel_id TEXT NOT NULL REFERENCES parcels(id) ON DELETE CASCADE,
+				status TEXT NOT NULL DEFAULT 'unknown',
+				message TEXT NOT NULL DEFAULT '',
+				location TEXT NOT NULL DEFAULT '',
+				timestamp DATETIME NOT NULL DEFAULT (datetime('now')),
+				created_at DATETIME NOT NULL DEFAULT (datetime('now'))
+			);
+
+			CREATE INDEX IF NOT EXISTS idx_tracking_events_parcel_id ON tracking_events(parcel_id);
+			CREATE INDEX IF NOT EXISTS idx_parcels_status ON parcels(status);
+			CREATE UNIQUE INDEX IF NOT EXISTS idx_parcels_tracking_carrier ON parcels(tracking_number, carrier) WHERE archived = 0;
+			CREATE INDEX IF NOT EXISTS idx_parcels_archived ON parcels(archived);
+			CREATE INDEX IF NOT EXISTS idx_parcels_updated_at ON parcels(updated_at);
+
+			CREATE TABLE IF NOT EXISTS settings (
+				key TEXT PRIMARY KEY,
+				value TEXT NOT NULL DEFAULT ''
+			);
+
+			CREATE TABLE IF NOT EXISTS push_subscriptions (
+				id TEXT PRIMARY KEY,
+				endpoint TEXT NOT NULL UNIQUE,
+				p256dh TEXT NOT NULL,
+				auth TEXT NOT NULL,
+				created_at DATETIME NOT NULL DEFAULT (datetime('now'))
+			);
+		`},
+		{2, ""}, // estimated_delivery column — handled below via columnExists.
+	}
+
+	for _, m := range migrations {
+		if m.version <= currentVersion {
+			continue
+		}
+		if m.sql != "" {
+			if _, err := s.db.Exec(m.sql); err != nil {
+				return fmt.Errorf("migration %d: %w", m.version, err)
+			}
+		}
+		// Migration 2: Add estimated_delivery column idempotently.
+		if m.version == 2 {
+			if !s.columnExists("parcels", "estimated_delivery") {
+				if _, err := s.db.Exec(`ALTER TABLE parcels ADD COLUMN estimated_delivery DATETIME`); err != nil {
+					return fmt.Errorf("migration %d: %w", m.version, err)
+				}
+			}
+		}
+	}
+
+	// Update schema version to latest.
+	latest := migrations[len(migrations)-1].version
+	if currentVersion < latest {
+		if currentVersion == 0 {
+			_, err = s.db.Exec("INSERT INTO schema_version (version) VALUES (?)", latest)
+		} else {
+			_, err = s.db.Exec("UPDATE schema_version SET version = ?", latest)
+		}
+		if err != nil {
+			return fmt.Errorf("update schema version: %w", err)
+		}
 	}
 
 	return nil
@@ -126,8 +171,8 @@ func (s *SQLiteStore) ListParcels(ctx context.Context, filter ParcelFilter) (Pag
 		}
 	}
 	if filter.Search != "" {
-		where += " AND (name LIKE ? OR tracking_number LIKE ?)"
-		searchPat := "%" + filter.Search + "%"
+		where += " AND (name LIKE ? ESCAPE '\\' OR tracking_number LIKE ? ESCAPE '\\')"
+		searchPat := buildSearchPattern(filter.Search)
 		args = append(args, searchPat, searchPat)
 	}
 
@@ -251,7 +296,10 @@ func (s *SQLiteStore) DeleteParcel(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	n, _ := res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
 	if n == 0 {
 		return sql.ErrNoRows
 	}
@@ -290,7 +338,13 @@ func (s *SQLiteStore) CreateEvent(ctx context.Context, e model.TrackingEvent) (m
 		e.Timestamp = e.CreatedAt
 	}
 
-	_, err := s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return model.TrackingEvent{}, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	_, err = tx.ExecContext(ctx,
 		`INSERT INTO tracking_events (id, parcel_id, status, message, location, timestamp, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		e.ID, e.ParcelID, e.Status, e.Message, e.Location, e.Timestamp, e.CreatedAt)
@@ -301,12 +355,16 @@ func (s *SQLiteStore) CreateEvent(ctx context.Context, e model.TrackingEvent) (m
 	// Update parcel status to the most recent event's status by timestamp.
 	// This avoids incorrect status when events are inserted out of chronological order
 	// (e.g. carrier API returns newest events first).
-	if _, err := s.db.ExecContext(ctx,
+	if _, err := tx.ExecContext(ctx,
 		`UPDATE parcels SET status = (
 			SELECT status FROM tracking_events WHERE parcel_id = ? ORDER BY timestamp DESC LIMIT 1
 		), updated_at = ? WHERE id = ?`,
 		e.ParcelID, time.Now().UTC(), e.ParcelID); err != nil {
-		return e, fmt.Errorf("update parcel status: %w", err)
+		return model.TrackingEvent{}, fmt.Errorf("update parcel status: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return model.TrackingEvent{}, fmt.Errorf("commit transaction: %w", err)
 	}
 
 	return e, nil
@@ -317,7 +375,10 @@ func (s *SQLiteStore) DeleteEvent(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	n, _ := res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
 	if n == 0 {
 		return sql.ErrNoRows
 	}
@@ -418,7 +479,33 @@ func (s *SQLiteStore) DeletePushSubscription(ctx context.Context, endpoint strin
 	return err
 }
 
-// Helper to filter out empty strings in query building
+// columnExists checks whether a column exists in a table using PRAGMA table_info.
+func (s *SQLiteStore) columnExists(table, column string) bool {
+	rows, err := s.db.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notnull int
+		var dflt sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
+			return false
+		}
+		if name == column {
+			return true
+		}
+	}
+	return false
+}
+
+// buildSearchPattern escapes LIKE wildcards and wraps in % for substring matching.
 func buildSearchPattern(search string) string {
-	return "%" + strings.ReplaceAll(search, "%", "\\%") + "%"
+	s := strings.ReplaceAll(search, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "%", "\\%")
+	s = strings.ReplaceAll(s, "_", "\\_")
+	return "%" + s + "%"
 }

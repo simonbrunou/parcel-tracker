@@ -53,5 +53,6 @@ type Store interface {
 	CreatePushSubscription(ctx context.Context, sub PushSubscription) (PushSubscription, error)
 	DeletePushSubscription(ctx context.Context, endpoint string) error
 
+	Ping(ctx context.Context) error
 	Close() error
 }

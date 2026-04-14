@@ -9,16 +9,28 @@
   let loading = $state(true);
   let error = $state("");
   let search = $state("");
+  let debouncedSearch = $state("");
   let statusFilter = $state("");
   let showArchived = $state(false);
+
+  // Debounce the search input to avoid filtering on every keystroke.
+  let debounceTimer: ReturnType<typeof setTimeout>;
+  $effect(() => {
+    const val = search;
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      debouncedSearch = val;
+    }, 300);
+    return () => clearTimeout(debounceTimer);
+  });
 
   const filtered = $derived(
     parcels.filter((p) => {
       if (!showArchived && p.archived) return false;
       if (showArchived && !p.archived) return false;
       if (statusFilter && p.status !== statusFilter) return false;
-      if (search) {
-        const q = search.toLowerCase();
+      if (debouncedSearch) {
+        const q = debouncedSearch.toLowerCase();
         return (
           p.name.toLowerCase().includes(q) ||
           p.tracking_number.toLowerCase().includes(q)
@@ -33,10 +45,10 @@
     error = "";
     try {
       parcels = (await listParcels()).data;
-    } catch (err: any) {
-      if (err?.status !== 401) {
-        error = err?.message || t("dashboard.loadFailed");
-      }
+    } catch (err: unknown) {
+      if (err instanceof Error && "status" in err && (err as any).status === 401) return;
+      const msg = err instanceof Error ? err.message : t("dashboard.loadFailed");
+      error = t("dashboard.loadFailed") + ": " + msg;
     } finally {
       loading = false;
     }

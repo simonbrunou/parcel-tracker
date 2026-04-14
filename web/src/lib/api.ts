@@ -10,11 +10,13 @@ class ApiError extends Error {
 
 async function request<T>(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  timeoutMs = 30000
 ): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     credentials: "same-origin",
+    signal: options.signal ?? AbortSignal.timeout(timeoutMs),
     headers: {
       "Content-Type": "application/json",
       ...options.headers,
@@ -105,13 +107,29 @@ export const listParcels = (params?: Record<string, string>) => {
 
 export const getParcel = (id: string) => request<Parcel>(`/parcels/${id}`);
 
-export const createParcel = (data: Partial<Parcel>) =>
+export interface CreateParcelRequest {
+  tracking_number: string;
+  carrier: string;
+  name?: string;
+  notes?: string;
+}
+
+export interface UpdateParcelRequest {
+  tracking_number: string;
+  carrier: string;
+  name: string;
+  notes: string;
+  status?: string;
+  archived?: boolean;
+}
+
+export const createParcel = (data: CreateParcelRequest) =>
   request<Parcel>("/parcels", {
     method: "POST",
     body: JSON.stringify(data),
   });
 
-export const updateParcel = (id: string, data: Partial<Parcel>) =>
+export const updateParcel = (id: string, data: UpdateParcelRequest) =>
   request<Parcel>(`/parcels/${id}`, {
     method: "PUT",
     body: JSON.stringify(data),
@@ -127,9 +145,15 @@ export const refreshParcel = (id: string) =>
 export const listEvents = (parcelId: string) =>
   request<TrackingEvent[]>(`/parcels/${parcelId}/events`);
 
+export interface CreateEventRequest {
+  status: string;
+  message: string;
+  location?: string;
+}
+
 export const createEvent = (
   parcelId: string,
-  data: Partial<TrackingEvent>
+  data: CreateEventRequest
 ) =>
   request<TrackingEvent>(`/parcels/${parcelId}/events`, {
     method: "POST",

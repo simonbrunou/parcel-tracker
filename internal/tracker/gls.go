@@ -44,7 +44,7 @@ func (t *GLSTracker) Track(ctx context.Context, trackingNumber string) (TrackRes
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 5<<20))
 	if err != nil {
 		return TrackResult{}, fmt.Errorf("gls: read response: %w", err)
 	}

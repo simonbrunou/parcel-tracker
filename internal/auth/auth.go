@@ -96,25 +96,28 @@ func (a *Auth) Verify(ctx context.Context, tokenStr string) error {
 }
 
 // SetSessionCookie sets the JWT as an HttpOnly cookie.
-func SetSessionCookie(w http.ResponseWriter, token string) {
+// When secure is true, the cookie is only sent over HTTPS.
+func SetSessionCookie(w http.ResponseWriter, token string, secure bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
 		Value:    token,
 		Path:     "/",
 		MaxAge:   int(tokenLifetime.Seconds()),
 		HttpOnly: true,
+		Secure:   secure,
 		SameSite: http.SameSiteStrictMode,
 	})
 }
 
 // ClearSessionCookie removes the session cookie.
-func ClearSessionCookie(w http.ResponseWriter) {
+func ClearSessionCookie(w http.ResponseWriter, secure bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
 		Value:    "",
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
+		Secure:   secure,
 		SameSite: http.SameSiteStrictMode,
 	})
 }
