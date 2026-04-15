@@ -8,47 +8,88 @@ import (
 	"github.com/simonbrunou/parcel-tracker/internal/model"
 )
 
+// testVintedGoResponse mirrors the actual v3 public API response format.
 const testVintedGoResponse = `{
-  "tracking_code": "VTDGO123456789",
-  "estimated_delivery": "2025-06-03T18:00:00Z",
   "tracking_events": [
     {
-      "status": "PICKED_UP",
-      "description": "Parcel picked up from sender",
-      "timestamp": "2025-06-01T10:00:00Z",
-      "location": {
-        "city": "Vilnius",
-        "country_code": "LT"
-      }
+      "id": 1313156661,
+      "message": "Ready to collect at the locker",
+      "timestamp": "2026-04-15T08:16:28.236Z",
+      "metadata": {
+        "address": "4 Rue Marcel Dassault, Saint-Avé, FR",
+        "point_id": 137178
+      },
+      "banner_message": null,
+      "group_header": null,
+      "group": "ready_for_pickup",
+      "state": "delivery"
     },
     {
-      "status": "IN_TRANSIT",
-      "description": "Parcel is in transit",
-      "timestamp": "2025-06-02T08:30:00Z",
-      "location": {
-        "city": "Warsaw",
-        "country_code": "PL"
-      }
+      "id": 1312884320,
+      "message": "The parcel is on its way to the locker (Intermarché Super)",
+      "timestamp": "2026-04-15T07:44:09.546Z",
+      "metadata": {},
+      "banner_message": null,
+      "group_header": "In transit",
+      "group": "in_transit",
+      "state": "delivery"
     },
     {
-      "status": "OUT_FOR_DELIVERY",
-      "description": "Parcel is out for delivery",
-      "timestamp": "2025-06-03T07:00:00Z",
-      "location": {
-        "city": "Paris",
-        "country_code": "FR"
-      }
+      "id": 1312228892,
+      "message": "At sorting center in Vannes, FR",
+      "timestamp": "2026-04-15T06:24:51.574Z",
+      "metadata": {},
+      "banner_message": null,
+      "group_header": "In transit",
+      "group": "in_transit",
+      "state": "delivery"
     },
     {
-      "status": "DELIVERED",
-      "description": "Parcel delivered to recipient",
-      "timestamp": "2025-06-03T14:23:00Z",
-      "location": {
-        "city": "Paris",
-        "country_code": "FR"
-      }
+      "id": 1307463543,
+      "message": "At sorting center in Paris, FR",
+      "timestamp": "2026-04-14T10:26:34.695Z",
+      "metadata": {},
+      "banner_message": null,
+      "group_header": "In transit",
+      "group": "in_transit",
+      "state": "delivery"
+    },
+    {
+      "id": 1304397033,
+      "message": "At sorting center in Paris, FR",
+      "timestamp": "2026-04-13T21:55:49.763Z",
+      "metadata": {},
+      "banner_message": null,
+      "group_header": "In transit",
+      "group": "in_transit",
+      "state": "delivery"
+    },
+    {
+      "id": 1288911719,
+      "message": "Parcel was dropped off at the parcel shop",
+      "timestamp": "2026-04-10T10:46:20.372Z",
+      "metadata": {},
+      "banner_message": null,
+      "group_header": null,
+      "group": "shipped",
+      "state": "delivery"
+    },
+    {
+      "id": 1287928334,
+      "message": "Shipment created",
+      "timestamp": "2026-04-10T08:29:27.631Z",
+      "metadata": {},
+      "banner_message": null,
+      "group_header": null,
+      "group": "created",
+      "state": "delivery"
     }
-  ]
+  ],
+  "meta": {
+    "banner": null,
+    "expiration_time": "2026-04-22T08:16:27.000Z",
+    "contextual_faq": []
+  }
 }`
 
 func TestVintedGoTrack(t *testing.T) {
@@ -73,12 +114,8 @@ func TestVintedGoTrack(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(result.Events) != 4 {
-		t.Fatalf("expected 4 events, got %d", len(result.Events))
-	}
-
-	if result.EstimatedDelivery == nil {
-		t.Fatal("expected estimated delivery to be set")
+	if len(result.Events) != 7 {
+		t.Fatalf("expected 7 events, got %d", len(result.Events))
 	}
 
 	tests := []struct {
@@ -87,10 +124,13 @@ func TestVintedGoTrack(t *testing.T) {
 		location string
 		msg      string
 	}{
-		{0, model.StatusInfoReceived, "Vilnius, LT", "Parcel picked up from sender"},
-		{1, model.StatusInTransit, "Warsaw, PL", "Parcel is in transit"},
-		{2, model.StatusOutForDelivery, "Paris, FR", "Parcel is out for delivery"},
-		{3, model.StatusDelivered, "Paris, FR", "Parcel delivered to recipient"},
+		{0, model.StatusOutForDelivery, "4 Rue Marcel Dassault, Saint-Avé, FR", "Ready to collect at the locker"},
+		{1, model.StatusInTransit, "", "The parcel is on its way to the locker (Intermarché Super)"},
+		{2, model.StatusInTransit, "Vannes, FR", "At sorting center in Vannes, FR"},
+		{3, model.StatusInTransit, "Paris, FR", "At sorting center in Paris, FR"},
+		{4, model.StatusInTransit, "Paris, FR", "At sorting center in Paris, FR"},
+		{5, model.StatusInfoReceived, "", "Parcel was dropped off at the parcel shop"},
+		{6, model.StatusInfoReceived, "", "Shipment created"},
 	}
 
 	for _, tt := range tests {
@@ -127,9 +167,6 @@ func TestParseVintedGoResponseEmpty(t *testing.T) {
 	if len(result.Events) != 0 {
 		t.Errorf("expected 0 events, got %d", len(result.Events))
 	}
-	if result.EstimatedDelivery != nil {
-		t.Error("expected nil estimated delivery for empty response")
-	}
 }
 
 func TestParseVintedGoResponseInvalid(t *testing.T) {
@@ -141,38 +178,38 @@ func TestParseVintedGoResponseInvalid(t *testing.T) {
 
 func TestMapVintedGoStatus(t *testing.T) {
 	tests := []struct {
-		status string
-		want   model.ParcelStatus
+		group string
+		state string
+		want  model.ParcelStatus
 	}{
-		{"DELIVERED", model.StatusDelivered},
-		{"COMPLETED", model.StatusDelivered},
-		{"DELIVERED_TO_PICKUP_POINT", model.StatusDelivered},
-		{"OUT_FOR_DELIVERY", model.StatusOutForDelivery},
-		{"DELIVERING", model.StatusOutForDelivery},
-		{"LAST_MILE", model.StatusOutForDelivery},
-		{"CREATED", model.StatusInfoReceived},
-		{"LABEL_CREATED", model.StatusInfoReceived},
-		{"REGISTERED", model.StatusInfoReceived},
-		{"PICKED_UP", model.StatusInfoReceived},
-		{"COLLECTED", model.StatusInfoReceived},
-		{"HANDED_OVER", model.StatusInfoReceived},
-		{"IN_TRANSIT", model.StatusInTransit},
-		{"TRANSIT", model.StatusInTransit},
-		{"SORTING", model.StatusInTransit},
-		{"RETURNED", model.StatusFailed},
-		{"RETURN_TO_SENDER", model.StatusFailed},
-		{"FAILED", model.StatusFailed},
-		{"CANCELLED", model.StatusFailed},
-		{"REFUSED", model.StatusFailed},
-		{"EXPIRED", model.StatusExpired},
-		{"UNKNOWN_STATUS", model.StatusInTransit},
-		{"", model.StatusInTransit},
+		{"created", "delivery", model.StatusInfoReceived},
+		{"shipped", "delivery", model.StatusInfoReceived},
+		{"handed_over", "delivery", model.StatusInfoReceived},
+		{"collected", "delivery", model.StatusInfoReceived},
+		{"in_transit", "delivery", model.StatusInTransit},
+		{"transit", "delivery", model.StatusInTransit},
+		{"sorting", "delivery", model.StatusInTransit},
+		{"out_for_delivery", "delivery", model.StatusOutForDelivery},
+		{"delivering", "delivery", model.StatusOutForDelivery},
+		{"last_mile", "delivery", model.StatusOutForDelivery},
+		{"ready_for_pickup", "delivery", model.StatusOutForDelivery},
+		{"ready_for_collection", "delivery", model.StatusOutForDelivery},
+		{"delivered", "delivery", model.StatusDelivered},
+		{"completed", "delivery", model.StatusDelivered},
+		{"returned", "delivery", model.StatusFailed},
+		{"return_to_sender", "delivery", model.StatusFailed},
+		{"failed", "delivery", model.StatusFailed},
+		{"cancelled", "delivery", model.StatusFailed},
+		{"refused", "delivery", model.StatusFailed},
+		{"expired", "delivery", model.StatusExpired},
+		{"unknown_group", "delivery", model.StatusInTransit},
+		{"", "", model.StatusInTransit},
 	}
 
 	for _, tt := range tests {
-		got := mapVintedGoStatus(tt.status, "")
+		got := mapVintedGoStatus(tt.group, tt.state)
 		if got != tt.want {
-			t.Errorf("mapVintedGoStatus(%q) = %q, want %q", tt.status, got, tt.want)
+			t.Errorf("mapVintedGoStatus(%q, %q) = %q, want %q", tt.group, tt.state, got, tt.want)
 		}
 	}
 }
@@ -186,6 +223,7 @@ func TestParseVintedGoDate(t *testing.T) {
 		{"2025-06-01T10:00:00+02:00", true},
 		{"2025-06-01T10:00:00", true},
 		{"2025-06-01T10:00:00.000", true},
+		{"2025-06-01T10:00:00.000Z", true},
 		{"2025-06-01 10:00:00", true},
 		{"2025-06-01", true},
 		{"invalid", false},
@@ -200,22 +238,52 @@ func TestParseVintedGoDate(t *testing.T) {
 	}
 }
 
-func TestBuildVintedGoLocation(t *testing.T) {
+func TestExtractVintedGoLocation(t *testing.T) {
 	tests := []struct {
-		loc  *vintedGoLocation
-		want string
+		name  string
+		event vintedGoEvent
+		want  string
 	}{
-		{&vintedGoLocation{City: "Paris", CountryCode: "FR"}, "Paris, FR"},
-		{&vintedGoLocation{City: "Paris"}, "Paris"},
-		{&vintedGoLocation{CountryCode: "FR"}, "FR"},
-		{&vintedGoLocation{}, ""},
-		{nil, ""},
+		{
+			name: "metadata address takes priority",
+			event: vintedGoEvent{
+				Message:  "Ready to collect at the locker",
+				Metadata: vintedGoMetadata{Address: "4 Rue Marcel Dassault, Saint-Avé, FR"},
+			},
+			want: "4 Rue Marcel Dassault, Saint-Avé, FR",
+		},
+		{
+			name: "location parsed from message",
+			event: vintedGoEvent{
+				Message:  "At sorting center in Paris, FR",
+				Metadata: vintedGoMetadata{},
+			},
+			want: "Paris, FR",
+		},
+		{
+			name: "no location available",
+			event: vintedGoEvent{
+				Message:  "Shipment created",
+				Metadata: vintedGoMetadata{},
+			},
+			want: "",
+		},
+		{
+			name: "parenthetical message no location",
+			event: vintedGoEvent{
+				Message:  "The parcel is on its way to the locker (Intermarché Super)",
+				Metadata: vintedGoMetadata{},
+			},
+			want: "",
+		},
 	}
 
 	for _, tt := range tests {
-		got := buildVintedGoLocation(tt.loc)
-		if got != tt.want {
-			t.Errorf("buildVintedGoLocation(%+v) = %q, want %q", tt.loc, got, tt.want)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractVintedGoLocation(tt.event)
+			if got != tt.want {
+				t.Errorf("extractVintedGoLocation() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
