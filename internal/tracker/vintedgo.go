@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -56,24 +57,32 @@ func (t *VintedGoTracker) Track(ctx context.Context, trackingNumber string) (Tra
 	return parseVintedGoResponse(body)
 }
 
-// Vinted Go JSON response structures.
+// Vinted Go JSON response structures — matching the actual v3 public API.
 
 type vintedGoResponse struct {
-	TrackingCode      string          `json:"tracking_code"`
-	EstimatedDelivery string          `json:"estimated_delivery"`
-	TrackingEvents    []vintedGoEvent `json:"tracking_events"`
+	TrackingEvents []vintedGoEvent `json:"tracking_events"`
+	Meta           *vintedGoMeta   `json:"meta"`
 }
 
 type vintedGoEvent struct {
-	Status      string            `json:"status"`
-	Description string            `json:"description"`
-	Timestamp   string            `json:"timestamp"`
-	Location    *vintedGoLocation `json:"location"`
+	ID            int                `json:"id"`
+	Message       string             `json:"message"`
+	Timestamp     string             `json:"timestamp"`
+	Metadata      vintedGoMetadata   `json:"metadata"`
+	BannerMessage *string            `json:"banner_message"`
+	GroupHeader   *string            `json:"group_header"`
+	Group         string             `json:"group"`
+	State         string             `json:"state"`
 }
 
-type vintedGoLocation struct {
-	City        string `json:"city"`
-	CountryCode string `json:"country_code"`
+type vintedGoMetadata struct {
+	Address string `json:"address,omitempty"`
+	PointID int    `json:"point_id,omitempty"`
+}
+
+type vintedGoMeta struct {
+	Banner         *string `json:"banner"`
+	ExpirationTime string  `json:"expiration_time"`
 }
 
 func parseVintedGoResponse(data []byte) (TrackResult, error) {
@@ -84,13 +93,6 @@ func parseVintedGoResponse(data []byte) (TrackResult, error) {
 
 	var result TrackResult
 
-	if resp.EstimatedDelivery != "" {
-		if t, err := parseVintedGoDate(resp.EstimatedDelivery); err == nil {
-			utc := t.UTC()
-			result.EstimatedDelivery = &utc
-		}
-	}
-
 	for _, e := range resp.TrackingEvents {
 		ts, err := parseVintedGoDate(e.Timestamp)
 		if err != nil {
@@ -98,9 +100,9 @@ func parseVintedGoResponse(data []byte) (TrackResult, error) {
 		}
 
 		result.Events = append(result.Events, model.TrackingEvent{
-			Status:    mapVintedGoStatus(e.Status, e.Description),
-			Message:   e.Description,
-			Location:  buildVintedGoLocation(e.Location),
+			Status:    mapVintedGoStatus(e.Group, e.State),
+			Message:   e.Message,
+			Location:  extractVintedGoLocation(e),
 			Timestamp: ts.UTC(),
 		})
 	}
@@ -111,6 +113,7 @@ func parseVintedGoResponse(data []byte) (TrackResult, error) {
 func parseVintedGoDate(s string) (time.Time, error) {
 	formats := []string{
 		time.RFC3339,
+		"2006-01-02T15:04:05.000Z",
 		"2006-01-02T15:04:05",
 		"2006-01-02T15:04:05.000",
 		"2006-01-02 15:04:05",
@@ -125,50 +128,43 @@ func parseVintedGoDate(s string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("vintedgo: unknown date format: %q", s)
 }
 
-func buildVintedGoLocation(loc *vintedGoLocation) string {
-	if loc == nil {
-		return ""
+// locationInPattern matches messages like "At sorting center in Paris, FR".
+var locationInPattern = regexp.MustCompile(`\bin\s+(.+)$`)
+
+// extractVintedGoLocation derives a location string from event metadata or message.
+func extractVintedGoLocation(e vintedGoEvent) string {
+	// Prefer explicit address from metadata.
+	if addr := strings.TrimSpace(e.Metadata.Address); addr != "" {
+		return addr
 	}
-	city := strings.TrimSpace(loc.City)
-	country := strings.TrimSpace(loc.CountryCode)
-	switch {
-	case city != "" && country != "":
-		return city + ", " + country
-	case city != "":
-		return city
-	case country != "":
-		return country
-	default:
-		return ""
+
+	// Fall back to parsing location from the message text (e.g. "At sorting center in Paris, FR").
+	if m := locationInPattern.FindStringSubmatch(e.Message); len(m) > 1 {
+		return strings.TrimSpace(m[1])
 	}
+
+	return ""
 }
 
-// mapVintedGoStatus maps a Vinted Go event status to an internal ParcelStatus.
-// Uses contains-matching on the uppercase status string for resilience against
-// variations like "DELIVERED_TO_PICKUP_POINT".
-func mapVintedGoStatus(status, description string) model.ParcelStatus {
-	upper := strings.ToUpper(strings.TrimSpace(status))
-
-	switch {
-	case strings.Contains(upper, "OUT_FOR_DELIVERY") ||
-		strings.Contains(upper, "DELIVERING") ||
-		strings.Contains(upper, "LAST_MILE"):
-		return model.StatusOutForDelivery
-	case strings.Contains(upper, "DELIVER") ||
-		strings.Contains(upper, "COMPLETED"):
-		return model.StatusDelivered
-	case strings.Contains(upper, "CREATED") ||
-		strings.Contains(upper, "REGISTERED") ||
-		strings.Contains(upper, "PICKED_UP") ||
-		strings.Contains(upper, "COLLECTED") ||
-		strings.Contains(upper, "HANDED"):
+// mapVintedGoStatus maps a Vinted Go event group/state to an internal ParcelStatus.
+// The "group" field is the primary discriminator in the v3 API.
+func mapVintedGoStatus(group, state string) model.ParcelStatus {
+	switch strings.ToLower(strings.TrimSpace(group)) {
+	case "created":
 		return model.StatusInfoReceived
-	case strings.Contains(upper, "RETURN") ||
-		strings.Contains(upper, "FAILED") ||
-		strings.Contains(upper, "CANCEL") ||
-		strings.Contains(upper, "REFUSED"):
+	case "shipped", "handed_over", "collected":
+		return model.StatusInfoReceived
+	case "in_transit", "transit", "sorting":
+		return model.StatusInTransit
+	case "out_for_delivery", "delivering", "last_mile":
+		return model.StatusOutForDelivery
+	case "ready_for_pickup", "ready_for_collection":
+		return model.StatusOutForDelivery
+	case "delivered", "completed":
+		return model.StatusDelivered
+	case "returned", "return_to_sender", "failed", "cancelled", "refused":
 		return model.StatusFailed
-	case strings.Contains(upper, "EXPIRED"):
+	case "expired":
 		return model.StatusExpired
 	default:
 		return model.StatusInTransit
