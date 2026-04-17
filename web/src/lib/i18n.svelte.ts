@@ -47,9 +47,15 @@ const en: Translations = {
   "dashboard.clearFilters": "Clear filters",
   "dashboard.noParcels": "No parcels yet",
   "dashboard.addFirst": "Add your first parcel to start tracking",
+  "dashboard.statTotal": "Active",
+  "dashboard.statInTransit": "In Transit",
+  "dashboard.statDelivered": "Delivered",
+  "dashboard.statAttention": "Attention",
 
   // Add Parcel
   "addParcel.title": "Add Parcel",
+  "addParcel.subtitle": "Enter your tracking info and we'll handle the rest.",
+  "addParcel.carrierHint": "Auto-tracking is available for supported carriers.",
   "addParcel.trackingNumber": "Tracking Number",
   "addParcel.trackingPlaceholder": "e.g. 1Z999AA10123456784",
   "addParcel.carrier": "Carrier",
@@ -178,9 +184,15 @@ const fr: Translations = {
   "dashboard.clearFilters": "Effacer les filtres",
   "dashboard.noParcels": "Aucun colis",
   "dashboard.addFirst": "Ajoutez votre premier colis pour commencer le suivi",
+  "dashboard.statTotal": "Actifs",
+  "dashboard.statInTransit": "En transit",
+  "dashboard.statDelivered": "Livr\u00e9s",
+  "dashboard.statAttention": "Attention",
 
   // Add Parcel
   "addParcel.title": "Ajouter un Colis",
+  "addParcel.subtitle": "Entrez les infos de suivi, on s'occupe du reste.",
+  "addParcel.carrierHint": "Le suivi automatique est disponible pour les transporteurs support\u00e9s.",
   "addParcel.trackingNumber": "Num\u00e9ro de suivi",
   "addParcel.trackingPlaceholder": "ex. 1Z999AA10123456784",
   "addParcel.carrier": "Transporteur",
