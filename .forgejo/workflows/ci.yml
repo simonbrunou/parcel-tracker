@@ -1,3 +1,7 @@
+# Runs on the self-hosted Forgejo (git.sbrn.eu), the source of truth; the GitHub
+# repository is a push mirror and runs no CI. Image publishing stays on GitHub:
+# .github/workflows/docker-publish.yml pushes to ghcr.io when main or a v* tag
+# reaches the mirror.
 name: CI
 
 on:
